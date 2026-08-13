@@ -1,0 +1,51 @@
+About Us
+MintMCP helps companies put agents to work safely. We exist to help companies do more of their work with agents, and we build the infrastructure that makes a company's own work runnable by them. That has to start from trust. Our first product is an MCP gateway that gives those agents governed access to company data and tools.
+
+Before agents can touch Slack, GitHub, Jira, Snowflake, internal databases, or production systems, you need to know what they can reach, what they did, and why they were allowed to do it. Most people carry far more permissions than any single task needs. If an agent uses your token directly, it inherits all of them. MintMCP scopes that access down to exactly what an agent needs to do its job and captures the data flows and audit logs security teams need. From there we are building the rest of the agent stack: connectors, monitoring, sandboxing, long-running agents, and memory, with the goal of becoming the system a company's work runs on.
+
+We work in person in the San Francisco Bay Area. The structure is flat and the market moves fast, so you have a lot of latitude over what you work on and how.
+
+AI-Native Startup
+
+We are AI-native. Everyone uses Claude and Codex every day, and we have more agents than employees. They run in Slack alongside the team, write code, review PRs, and handle sales, marketing, and deal ops on the same gateway we sell to customers. We are building an entire company operating system around them, and you will help build it.
+
+Traction
+
+Since launching in February 2026, we have grown to 40+ paying customers, with strong inbound demand. Customers include Coursera, Arlo, and Braze. We are backed by Cowboy Ventures and Coatue, with angels including Frederic Kerrest (Okta), Michael Grinich (WorkOS), Andrej Karpathy, Jeff Dean, and Scott Belsky. Our founders are machine learning experts from Stanford, Berkeley, and CMU, with applied research at Google Brain and Waymo, and one co-founded Coursera.
+
+The Job
+
+You will own features end to end, from conception to production, across our gateway infrastructure, enterprise deployments, and agentic systems. The work leans backend and infra, but nothing is off limits: when the product needs a better UI you build it, and when a connector breaks during a security review you fix it.
+
+Claude and Codex are your primary working environment, and you use a fleet of agents to move faster than a team this size has any right to. Agents write much of the code and review PRs, so your real job is the judgment they cannot make: shaping the problem, making architecture, product, and UX calls, hardening enterprise paths, designing connectors, protecting security-sensitive surfaces, and catching generated code that is quietly wrong. Roles are blurred and we ship within hours, and you will learn directly from the founders and from customers.
+
+We hire across levels, from strong early-career builders to seasoned engineers, and we set level and pay to match. What matters most is judgment, range, and how fast you ship.
+
+About You
+
+You are a builder with a track record of shipping to real users, whether that is a product, an internal tool, an open-source project, or a serious side project. You ship, then iterate, without waiting for specs or approvals.
+
+You have strong fundamentals and learn fast. How quickly you pick things up matters as much as years of experience.
+
+You care about product value and customer needs over technical purity.
+
+You take infra seriously. You think about blast radius, trust boundaries, and what happens when your code is in the path of every customer's agents.
+
+You can read unfamiliar code, reason from first principles, and explain your tradeoffs.
+
+You are comfortable across the stack (TypeScript, Python, CockroachDB), or you pick up new languages, protocols, and domains fast.
+
+You are excited to build with agents, and to learn when they help and when they hide a problem.
+
+You already build with AI every day and want room to move without heavy process.
+
+Nice to have:
+
+Developer-facing products, protocol or gateway work, or infrastructure at scale.
+
+Background in security, identity, or permission systems.
+
+Contributions to open source, MCP servers, or agentic frameworks.
+
+Design sensibility: engineers who care about design, designers who think about infrastructure.
+

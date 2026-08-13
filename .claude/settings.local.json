@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where pdflatex *)",
+      "Bash(where claude *)",
+      "Bash(claude --version)",
+      "Bash(python tailor.py)"
+    ]
+  }
+}
