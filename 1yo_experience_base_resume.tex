@@ -1,0 +1,177 @@
+%-------------------------
+% Resume in Latex
+% Author : Michael Aho
+%------------------------
+
+\documentclass[letterpaper,11pt]{article}
+
+\usepackage{latexsym}
+\usepackage[empty]{fullpage}
+\usepackage{titlesec}
+\usepackage{marvosym}
+\usepackage[usenames,dvipsnames]{xcolor}
+\usepackage{verbatim}
+\usepackage{enumitem}
+\usepackage[colorlinks=true,urlcolor=MidnightBlue,linkcolor=MidnightBlue]{hyperref}
+\usepackage{fancyhdr}
+\usepackage[english]{babel}
+\usepackage{tabularx}
+\input{glyphtounicode}
+
+\pagestyle{fancy}
+\fancyhf{} % clear all header and footer fields
+\fancyfoot{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% Adjust margins
+\addtolength{\oddsidemargin}{-0.5in}
+\addtolength{\evensidemargin}{-0.5in}
+\addtolength{\textwidth}{1in}
+\addtolength{\topmargin}{-.5in}
+\addtolength{\textheight}{1in}
+
+\urlstyle{same}
+
+\raggedbottom
+\raggedright
+\setlength{\tabcolsep}{0in}
+
+% Sections formatting - Changed rule color to darkgray
+\titleformat{\section}{
+  \vspace{-9pt}\scshape\raggedright\large
+}{}{0em}{}[\color{darkgray}\titlerule \vspace{-5pt}]
+
+% Ensure that generated PDF is machine readable/ATS parsable
+\pdfgentounicode=1
+
+%-------------------------
+% Custom commands
+\newcommand{\resumeItem}[1]{
+  \item\small{
+    {#1 \vspace{-2pt}}
+  }
+}
+
+\newcommand{\resumeSubheading}[4]{
+  \vspace{-2pt}\item
+    \begin{tabular*}{1\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & #2 \\
+      {\small#3} & {\small #4} \\
+    \end{tabular*}\vspace{-7pt}
+}
+
+% Custom command for project headings
+\newcommand{\resumeProjectHeading}[4]{
+  \vspace{-2pt}\item
+    \begin{tabular*}{1\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & #2 \\
+      {\small#3} & {\small #4} \\
+    \end{tabular*}\vspace{-7pt}
+}
+
+
+\newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-4pt}}
+
+\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}
+
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0in, label={}]}
+\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
+\newcommand{\resumeItemListStart}{\begin{itemize}}
+\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-4pt}}
+
+%-------------------------------------------
+%%%%%%  RESUME STARTS HERE  %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\begin{document}
+
+%----------HEADING----------
+% Removed underlining from links
+\begin{center}
+    \textbf{\Huge  \scshape Michael Aho} \\ \vspace{3pt}
+    \normalsize Leesburg, VA $|$ (703) 881-8840 $|$ michael.aho84@gmail.com $|$ 
+    \href{https://www.linkedin.com/in/michael-a-aho/}{LinkedIn} $|$
+    \href{https://michaelaho1.github.io/Portfolio/}{Portfolio} $|$
+    \href{https://github.com/MichaelAho1}{GitHub}
+\end{center}
+\vspace{-12pt}
+
+%-----------EDUCATION-----------
+\section{EDUCATION}
+  \resumeSubHeadingListStart
+    \resumeSubheading
+      {James Madison University}{Expected December 2026}
+      {Bachelor of Science, Computer Science}{Harrisonburg, VA}
+      \resumeItemListStart
+        \resumeItem{\textbf{Relevant Coursework}: Data Structures \& Algorithms I/II, Software Engineering, Computer Systems I/II, Parallel \& Distributed Systems, Web Development, Software Development With AI, Object-Oriented Programming}
+        \resumeItem{\textbf{Awards}: Dean’s List (Fall 2024, Spring 2025)}
+      \resumeItemListEnd
+  \resumeSubHeadingListEnd
+
+%-----------EXPERIENCE-----------
+\section{WORK EXPERIENCE}
+  \resumeSubHeadingListStart
+      \resumeSubheading
+      {ILS}{December 2025 - Present}
+      {Software Engineer}{Reston, VA}
+       \resumeItemListStart
+       \resumeItem{Architected and developed a distributed backend (Go, Elasticsearch, Elastic Open Crawler) for an enterprise search platform with scalable ingestion pipelines, enabling clients to search large document datasets with sub-second latency}
+        \resumeItem{Optimized Elasticsearch ingestion via Bulk API batching, achieving a 17x throughput gain (866 to 15,000+ docs/sec)}
+        \resumeItem{Built Go REST APIs for bulk CSV ingestion and asynchronous crawls, enabling 20,000+ crawl creations per request}
+      \resumeItemListEnd
+      \resumeSubheading
+      {Capital One}{June 2026 - August 2026}
+      {Software Engineer Intern}{Richmond, VA}
+        \resumeItemListStart
+        \resumeItem{Developed the transactions AWS Lambda service powering Eno, Capital One's AI assistant serving 5M+ customers}
+        \resumeItem{Migrated payments MCP tooling across 5 repos to TypeScript, removing Python dependency conflicts for 3 teams}
+        \resumeItem{Automated Lambda deployment rollbacks using Integrity and CodeDeploy canaries, cutting MTTR to 5 minutes}
+        \resumeItem{Built a NPI/PII masking layer across 6 lambdas to redact sensitive financial identifiers, screening 180K logs/week}
+    \resumeItemListEnd
+    \resumeSubheading
+      {Cross Screen Media}{May 2025 - August 2025}
+      {Software Engineer Intern}{Alexandria, VA}
+      \resumeItemListStart
+        \resumeItem{Developed full-stack features for ScreenSolveV2, an analytics platform, using React/TypeScript and Django/Python, including a filtering tool that supports 300+ attributes, improving audience targeting for 1,500+ ad campaigns}
+        \resumeItem{Migrated 15 TypeScript end-to-end test suites from Cypress to RainforestQA, enabling parallel test execution, reducing total test runtime by 68\% (from 25 to 8 minutes)}
+        \resumeItem{Engineered a Python/SQL data pipeline, eliminating data handling errors across 75+ audience attributes}
+      \resumeItemListEnd
+  \resumeSubHeadingListEnd
+
+%-----------PROJECTS-----------
+\section{PROJECTS}
+  \resumeSubHeadingListStart
+    \resumeProjectHeading
+      {QuickMarketz}
+      {April 2025 - December 2025}
+      {AWS (EC2, Route53, RDS), Docker, React/JavaScript, Django/Python, PostgreSQL}
+      {\href{https://github.com/MichaelAho1/QuickMarkets}{Source Code}}
+      \resumeItemListStart
+        \resumeItem{Led a team of 3 in building an accelerated stock market simulator  (5 simulated minutes = 1 trading day)}
+        \resumeItem{Developed a stock pricing algorithm with Django/Python using Geometric Brownian Motion, trend modeling, and mean reversion logic, generating realistic price updates for 200+ stocks - tested accuracy with PyTest}
+        \resumeItem{Deployed and developed a Python timer microservice on an AWS EC2 instance, driving end-of-day price generation}
+      \resumeItemListEnd
+      
+    \resumeProjectHeading
+      {Fantasy Stock League}
+      {October 2025 - November 2025}
+      {React/JavaScript, Django/Python}
+    {\href{https://github.com/MichaelAho1/FantasyStockLeague}{Source Code}}
+      \resumeItemListStart
+        \resumeItem{Engineered singleton-based rate limiting to enforce a 5-call/30-min quota, reducing third-party API usage by 80\%}
+        \resumeItem{Built a React SPA + Django backend with JWT auth, enforcing league-scoped authorization across 15 endpoints}
+      \resumeItemListEnd  
+    \resumeSubHeadingListEnd
+
+%-----------PROGRAMMING SKILLS-----------
+\section{SKILLS}
+ \begin{itemize}[leftmargin=0in, label={}]
+    \small{\item{
+     \textbf{Programming Languages}{: Python, TypeScript, JavaScript, Java, Go, SQL} \\
+     \textbf{Frameworks \& Libraries}{: Django, React, Redux, NumPy, Pandas} \\
+    \textbf{Cloud \& Tools}{: AWS (Lambda, EC2, RDS, Route53), Docker, Linux, REST APIs} }} \\
+    \textbf{Testing \& Databases}{: PyTest, JUnit, MySQL, PostgreSQL, Elasticsearch} 
+ \end{itemize}
+
+\end{document}

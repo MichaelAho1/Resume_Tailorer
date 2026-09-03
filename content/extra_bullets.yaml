@@ -1,0 +1,39 @@
+# =============================================================================
+# EXTRA BULLETS - additional things you did at jobs/projects ALREADY on the resume
+# =============================================================================
+# Use this for accomplishments that didn't make the cut on base_resume.tex.
+# The tailor can swap one of these in for a weaker existing bullet, or add it
+# outright when there is room.
+#
+# Use this file for things big enough to stand as their own bullet. For small
+# details that belong INSIDE an existing bullet (a tool you used, a language,
+# a workflow), use content/facts.yaml instead.
+#
+# `entry` must be one of the entry ids parsed from base_resume.tex. Run
+# `python tailor.py --list-ids` to print the current valid ids.
+#
+# Current ids:
+#   capital_one, ils, cross_screen_media, quickmarketz, fantasy_stock_league
+#
+# Rules:
+#   - Every `id` must be unique across all three content files.
+#   - Literal % & $ _ may be written raw or escaped; both work.
+#   - `tags` should use words a job posting would actually contain.
+#   - Add generously. Unused bullets cost nothing; missing ones cost you matches.
+# =============================================================================
+
+bullets:
+  - id: cross_screen_debug
+    entry: cross_screen_media
+    text: Debugged 12+ full-stack tickets using React and Django, improving UI/UX capabilities for ScreenSolveV2
+    tags: [debugging, react, django, full-stack, ui, ux, frontend, maintenance, troubleshooting]
+
+  - id: quickmarketz_rest_apis
+    entry: quickmarketz
+    text: Engineered REST APIs for transactions, authentication, and portfolio updates, using React for front-end integration
+    tags: [rest-api, apis, backend, react, authentication, full-stack, django]
+
+  - id: quickmarketz_deploy
+    entry: quickmarketz
+    text: Deployed using PostgreSQL and AWS (EC2, Route53, RDS), utilizing Docker for containerization
+    tags: [aws, docker, containers, postgresql, deployment, cloud, devops, infrastructure]

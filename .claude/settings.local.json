@@ -4,7 +4,20 @@
       "Bash(where pdflatex *)",
       "Bash(where claude *)",
       "Bash(claude --version)",
-      "Bash(python tailor.py)"
+      "Bash(python tailor.py)",
+      "Bash(./.venv/Scripts/python.exe -c \"import yaml; print\\('pyyaml', yaml.__version__\\)\")",
+      "Bash(./.venv/Scripts/python.exe -m pip install pyyaml)",
+      "Bash(./.venv/Scripts/python.exe -c \"import yaml; print\\(yaml.__version__\\)\")",
+      "Bash(./.venv/Scripts/python.exe -c ' *)",
+      "Bash(rm -f _rt.tex)",
+      "Bash(rm -rf .rtbuild)",
+      "Bash(./.venv/Scripts/python.exe tailor.py --list-ids)",
+      "Bash(rm -f _test.tex)",
+      "Bash(./.venv/Scripts/python.exe tailor.py --save-plan _plan.json)",
+      "Bash(rm -rf \"C:/Users/swimm/AppData/Local/Temp/claude/C--Users-swimm-Desktop-Resume-Tailorer/b24a4e3f-d3ec-4fc9-b632-f5a09368aecb/scratchpad/fde_out\")",
+      "Bash(./.venv/Scripts/python.exe tailor.py --job \"C:/Users/swimm/AppData/Local/Temp/claude/C--Users-swimm-Desktop-Resume-Tailorer/b24a4e3f-d3ec-4fc9-b632-f5a09368aecb/scratchpad/fde_job.txt\" --output \"C:/Users/swimm/AppData/Local/Temp/claude/C--Users-swimm-Desktop-Resume-Tailorer/b24a4e3f-d3ec-4fc9-b632-f5a09368aecb/scratchpad/fde_out\")",
+      "Bash(rm -f _plan.json)",
+      "Bash(./.venv/Scripts/python.exe tailor.py)"
     ]
   }
 }

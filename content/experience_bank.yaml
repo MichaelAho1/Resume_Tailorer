@@ -1,0 +1,72 @@
+# =============================================================================
+# EXPERIENCE BANK - work experience and projects that are NOT on base_resume.tex
+# =============================================================================
+# The tailor decides per job whether to pull any of these onto the resume.
+# Since the resume is one page, adding something here usually means the tailor
+# drops or trims something else. That is intended.
+#
+# Rules:
+#   - Every `id` must be unique across experience_bank.yaml, extra_bullets.yaml,
+#     and facts.yaml.
+#   - Write bullets as plain text. Literal % & $ _ may be written raw or escaped
+#     (\% \& \$ \_); both work.
+#   - `tags` are free-form hints. The tailor matches them against the job
+#     description, so use words a job posting would actually contain.
+#   - `notes` is context for the tailor's judgement only. It is NEVER copied
+#     onto the resume verbatim - use it to explain scope, seniority, or when
+#     this is and isn't worth including.
+#   - Give each experience MORE bullets than would ever fit. The tailor picks
+#     the best subset for each job.
+#   - `requires_drop` (optional): an ordered list of what MUST be removed from
+#     the resume if this entry is added. The first target still present is
+#     removed - not a suggestion, this is enforced in code even if the model
+#     forgets. Targets are resume entry ids (see --list-ids) or the sentinel
+#     `jmu_coursework_and_awards`, which removes JMU's "Relevant Coursework"
+#     and "Awards" bullets together as one unit. If two added entries both
+#     list the same first-choice target, the second one falls through to its
+#     next preference once the first is already gone.
+# =============================================================================
+
+experiences:
+  - id: landmarks
+    company: LandmarksCM
+    title: AI Consultant
+    dates: August 2025 - Present
+    location: Reston, VA
+    tags: [ai, llm, claude, genai, consulting, client-facing, communication, clients, stakeholder, forward-deployed, automation, prompt-engineering, adoption, advertising]
+    notes: >
+      Client-facing applied-AI consulting, and the only currently ongoing role.
+      Strongest signal for postings about client communication, interfacing with
+      internal/external stakeholders, consulting, or solutions delivery — not
+      only AI/ML roles. Also strong for AI/ML, LLMs, GenAI adoption, or
+      forward-deployed archetypes. Less relevant for pure infrastructure postings.
+    requires_drop: [fantasy_stock_league, jmu_coursework_and_awards]
+    bullets:
+      - id: 2landmarks_adoption
+        text: Led company-wide adoption of Claude across advertising documentation workflows, cutting 50+ hours of manual work per week and accelerating turnaround on campaigns supporting \$5M+ in annual ad buys
+        tags: [claude, llm, genai, adoption, automation, business-impact, stakeholder]
+      - id: 2landmarks_context
+        text: Established context-management best practices that improved output accuracy and reduced token spend by 30\%
+        tags: [llm, prompt-engineering, context-engineering, cost-optimization, evaluation, best-practices]
+
+projects:
+  - id: parallel_nbody
+    name: Parallel-Nbody (Open Source Project)
+    dates: March 2026 - May 2026
+    tech: Python, C, C++
+    link: ""
+    tags: [hpc, parallel, distributed, mpi, c, cpp, python, performance, benchmarking, profiling, numpy, matplotlib, open-source, data-analysis]
+    notes: >
+      High-performance and parallel computing work. Best signal for postings
+      that mention distributed systems, parallelism, performance engineering,
+      C/C++, scientific computing, benchmarking, or data analysis and
+      visualization. Also the only open-source contribution on file.
+      No public link was provided, so the heading renders without one.
+    requires_drop: [fantasy_stock_league, jmu_coursework_and_awards]
+    bullets:
+      - id: nbody_analysis
+        text: Wrote Python scripts to analyze the performance of parallel C/C++ MPI algorithms, identifying a ~60\% runtime improvement between the worst and best algorithm at scale
+        tags: [python, c, cpp, mpi, performance, profiling, data-analysis, parallel]
+      - id: nbody_pipeline
+        text: Built a benchmark pipeline for shared-memory weak scaling and distributed MPI sweeps, rendering them with a Python visualizer (NumPy/matplotlib) as plots
+        tags: [benchmarking, mpi, distributed, numpy, matplotlib, visualization, pipeline, parallel]

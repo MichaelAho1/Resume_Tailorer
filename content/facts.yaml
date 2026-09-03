@@ -1,0 +1,96 @@
+# =============================================================================
+# FACTS - true details too small to be their own bullet
+# =============================================================================
+# These are things the tailor can WEAVE INTO an existing bullet when the job
+# calls for them, rather than add as a separate line. For example, a posting
+# that asks for AI-assisted development can turn
+#
+#   "Migrated payments MCP tooling across 5 repos to TypeScript"
+# into
+#   "Migrated payments MCP tooling across 5 repos to TypeScript using Claude Code"
+#
+# Facts are only used when the posting makes them relevant. A fact that no job
+# asks about simply never appears, which costs you nothing - so add every tool,
+# language, and workflow you can honestly claim.
+#
+# `scope` controls where a fact may be used:
+#   <entry id>  - only in bullets belonging to that entry (capital_one, ils,
+#                 cross_screen_media, quickmarketz, fantasy_stock_league, or a
+#                 bank entry id like 2landmarks)
+#   global      - in any bullet, and in the skills lines
+#   skills      - in the skills lines only
+#
+# `bullet_hint` optionally names which bullet a fact attaches to, for facts that
+# are only true of one specific piece of work.
+#
+# Run `python tailor.py --list-ids` to print valid entry ids.
+# Every `id` must be unique across all three content files.
+# =============================================================================
+
+facts:
+  # --- cross-cutting -------------------------------------------------------
+  - id: git_everywhere
+    scope: global
+    text: Git used for version control across every project and software engineering role
+    tags: [git, version-control, github, source-control, collaboration]
+
+  - id: linux_jmu
+    scope: skills
+    text: Linux used for coursework at James Madison University
+    tags: [linux, unix, command-line, operating-systems]
+
+  - id: database_coursework
+    scope: skills
+    text: Completed a Database Administration course at James Madison University
+    tags: [databases, sql, database-administration, relational-databases]
+
+  # --- Capital One ---------------------------------------------------------
+  - id: co_languages
+    scope: capital_one
+    text: All Capital One work was written in TypeScript and Python
+    tags: [typescript, python, languages]
+
+  - id: co_agile
+    scope: capital_one
+    text: Worked in an Agile workflow with the team
+    tags: [agile, scrum, sprints, collaboration, teamwork, communication]
+
+  - id: co_claude_code
+    scope: capital_one
+    text: Used Claude Code as a development tool
+    tags: [claude, claude-code, ai-tooling, llm, ai-assisted-development, developer-tools, genai]
+
+  - id: co_splunk
+    scope: capital_one
+    bullet_hint: the Integrity / CodeDeploy rollback automation bullet
+    text: The Integrity rollback automation included writing a Splunk query
+    tags: [splunk, observability, monitoring, logging, alerting, alerts, outages, sre, incident-response]
+
+  # --- ILS -----------------------------------------------------------------
+  - id: ils_cursor
+    scope: ils
+    text: Used Cursor as a development tool
+    tags: [cursor, ai-tooling, ai-assisted-development, developer-tools, genai]
+
+  # --- Cross Screen Media --------------------------------------------------
+  - id: cross_screen_agile
+    scope: cross_screen_media
+    text: Worked in an Agile workflow with designers and product managers
+    tags: [agile, scrum, sprints, collaboration, teamwork, cross-functional, communication]
+
+  - id: cross_screen_cursor
+    scope: cross_screen_media
+    text: Used Cursor as a development tool
+    tags: [cursor, ai-tooling, ai-assisted-development, developer-tools, genai]
+
+  - id: cross_screen_snowflake
+    scope: cross_screen_media
+    bullet_hint: the Python/SQL data pipeline bullet
+    text: The data pipeline work was built against Snowflake
+    tags: [snowflake, data-warehouse, data-engineering, sql, etl, analytics]
+
+  # --- QuickMarketz --------------------------------------------------------
+  - id: quickmarketz_orm
+    scope: quickmarketz
+    text: Database queries went through an ORM (Django REST Framework's ORM)
+    tags: [orm, django, drf, databases, sql, backend]

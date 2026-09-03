@@ -1,5 +1,15 @@
 #!/usr/bin/env python3
-"""Local CLI: tailor LaTeX resume bullets to a job description via Claude Code, then compile PDF."""
+"""Tailor a LaTeX resume to a job description via the local Claude Code CLI.
+
+Pipeline:
+  1. Parse base_resume.tex into sections -> entries -> bullets.
+  2. Load the YAML content bank (off-resume experiences, projects, bullets).
+  3. Analyze the job and plan edits in one LLM call (sparse plan: only changes).
+  4. Validate and apply the plan; paraphrase-only rewrites are rejected.
+  5. Compile, read the real page count, and trim until it fits one page.
+
+The master resume is never modified.
+"""
 
 from __future__ import annotations
 
@@ -10,647 +20,155 @@ import re
 import shutil
 import subprocess
 import tempfile
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
+import planner
+from apply_plan import (
+    SKILL_LINE_RE,
+    apply_plan,
+    apply_trim,
+    enforce_entry_requirements,
+    suggest_enrichments,
+)
+from bank import bank_payload, load_bank
+from resume_doc import (
+    MUTABLE_SECTIONS,
+    Document,
+    TailorError,
+    parse_resume,
+    render_document,
+    slugify,
+)
 
-DEFAULT_RESUME = "base_resume.tex"
+RESUME_NEW_GRAD = "base_resume.tex"
+RESUME_1YO = "1yo_experience_base_resume.tex"
 DEFAULT_JOB = "job_description.txt"
 DEFAULT_OUTPUT = "output"
+DEFAULT_BANK = "content"
 DEFAULT_MODEL = "sonnet"
+DEFAULT_PLAN_MODEL = "opus"
 OUTPUT_BASENAME = "Michael_Aho_Resume_2026"
-WORD_TOLERANCE = 0.15
-CHAR_TOLERANCE = 0.20
+MAX_PAGES = 1
+MAX_TRIM_PASSES = 3
+# Calibrated for this template by padding the resume until pdflatex reported a
+# second page: the base resume estimates 42 rendered lines and it spills between
+# 48 and 52. 47 lets the planner use most of the page while landing under the
+# ceiling often enough that the trim loop stays a fallback rather than the norm.
+LINE_BUDGET = 47
 
-STRUCTURAL_LATEX_PATTERNS = [
-    r"\\documentclass\b",
-    r"\\begin\s*\{",
-    r"\\end\s*\{",
-    r"\\section\b",
-    r"\\subsection\b",
-    r"\\resumeItem\b",
-    r"\\resumeSubheading\b",
-    r"\\resumeProjectHeading\b",
-    r"\\resumeItemListStart\b",
-    r"\\resumeItemListEnd\b",
-    r"\\resumeSubHeadingListStart\b",
-    r"\\resumeSubHeadingListEnd\b",
-    r"\\usepackage\b",
-    r"\\input\b",
-    r"\\include\b",
-]
+PAGE_COUNT_RE = re.compile(r"\((\d+)\s+pages?,", re.IGNORECASE)
 
-SPECIAL_CHARS = {"&", "%", "$", "#", "_", "{", "}"}
+# ---------------------------------------------------------------------------
+# Base resume auto-selection
+# ---------------------------------------------------------------------------
+
+_NUMBER_WORDS = {"zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5}
+
+# Matches phrasing like "1+ years of experience", "2-4 years experience",
+# "at least one year of relevant experience".
+_YEARS_EXPERIENCE_RE = re.compile(
+    r"(?P<num>\d+|zero|one|two|three|four|five)\s*\+?\s*(?:-\s*\d+\s*)?\+?\s*"
+    r"years?\s+(?:of\s+)?(?:[a-z]+\s+){0,4}?experience",
+    re.IGNORECASE,
+)
+
+_NEW_GRAD_SIGNS_RE = re.compile(
+    r"\b(new grad(?:uate)?s?|entry[- ]level|recent graduate|early[- ]career|"
+    r"no prior experience(?:\s+required)?)\b",
+    re.IGNORECASE,
+)
+
+
+def min_years_required(job_text: str) -> int | None:
+    """Lowest years-of-experience figure mentioned in the posting, if any."""
+    years = []
+    for m in _YEARS_EXPERIENCE_RE.finditer(job_text):
+        raw = m.group("num").lower()
+        years.append(int(raw) if raw.isdigit() else _NUMBER_WORDS[raw])
+    return min(years) if years else None
+
+
+def select_base_resume(job_text: str) -> str:
+    """Pick which master resume to tailor from based on the posting's experience bar.
+
+    Postings that ask for 1+ years of experience use the resume where ILS (the
+    current job) leads WORK EXPERIENCE; postings with no such requirement (or an
+    explicit new-grad/entry-level signal) use the plain new-grad template.
+    """
+    years = min_years_required(job_text)
+    if years is not None and years >= 1:
+        return RESUME_1YO
+    return RESUME_NEW_GRAD
 
 
 # ---------------------------------------------------------------------------
-# Data
+# Payloads
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class Bullet:
-    id: str
-    text: str
-    content_start: int
-    content_end: int
-
-    @property
-    def word_count(self) -> int:
-        return len(self.text.split())
-
-    @property
-    def char_count(self) -> int:
-        return len(self.text)
-
-
-class TailorError(Exception):
-    """User-facing fatal error."""
-
-
-# ---------------------------------------------------------------------------
-# Parsing / applying
-# ---------------------------------------------------------------------------
-
-
-def find_balanced_brace_content(source: str, open_brace_index: int) -> tuple[str, int]:
-    """Given index of '{', return (inner content, index after closing '}')."""
-    if open_brace_index >= len(source) or source[open_brace_index] != "{":
-        raise TailorError("Expected '{' when parsing \\resumeItem.")
-
-    depth = 0
-    i = open_brace_index
-    while i < len(source):
-        ch = source[i]
-        if ch == "\\" and i + 1 < len(source):
-            i += 2
-            continue
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                return source[open_brace_index + 1 : i], i + 1
-        i += 1
-    raise TailorError("Unbalanced braces while parsing \\resumeItem{...}.")
-
-
-def parse_resume_items(source: str) -> list[Bullet]:
-    """Find every \\resumeItem{...} in the document body (brace-aware)."""
-    # Ignore macro definitions before \begin{document}
-    begin = re.search(r"\\begin\{document\}", source)
-    end = re.search(r"\\end\{document\}", source)
-    search_start = begin.end() if begin else 0
-    search_end = end.start() if end else len(source)
-
-    bullets: list[Bullet] = []
-    pattern = re.compile(r"\\resumeItem\s*\{")
-    for match in pattern.finditer(source, search_start, search_end):
-        open_brace = match.end() - 1
-        content, _ = find_balanced_brace_content(source, open_brace)
-        content_start = open_brace + 1
-        content_end = content_start + len(content)
-        bullets.append(
-            Bullet(
-                id=f"bullet_{len(bullets) + 1}",
-                text=content,
-                content_start=content_start,
-                content_end=content_end,
-            )
-        )
-    return bullets
-
-
-def escape_latex_specials(text: str) -> str:
-    """Escape raw LaTeX specials without double-escaping already-escaped ones."""
-    result: list[str] = []
-    i = 0
-    n = len(text)
-    while i < n:
-        ch = text[i]
-        if ch == "\\" and i + 1 < n:
-            nxt = text[i + 1]
-            if nxt.isalpha():
-                # Control word (e.g. \textbf): copy the command name verbatim, then
-                # pass its balanced {...} argument through untouched at the brace
-                # level (those braces are syntax, not literal text) while still
-                # escaping any specials inside the argument.
-                j = i + 1
-                while j < n and text[j].isalpha():
-                    j += 1
-                result.append(text[i:j])
-                i = j
-                if i < n and text[i] == "{":
-                    inner, after = find_balanced_brace_content(text, i)
-                    result.append("{")
-                    result.append(escape_latex_specials(inner))
-                    result.append("}")
-                    i = after
-                continue
-            # Control symbol (e.g. \%, \&, \_, \{, \}): already escaped, keep as-is.
-            result.append(text[i : i + 2])
-            i += 2
-            continue
-        if ch in SPECIAL_CHARS:
-            result.append("\\" + ch)
-        else:
-            result.append(ch)
-        i += 1
-    return "".join(result)
-
-
-def prepare_replacement_text(original: str, proposed: str) -> str:
-    """Escape newly introduced specials; preserve existing LaTeX in proposed text."""
-    return escape_latex_specials(proposed)
-
-
-def apply_replacements(source: str, bullets: list[Bullet], replacements: dict[str, str]) -> str:
-    """Splice replacement texts into original LaTeX (right-to-left to keep offsets)."""
-    by_id = {b.id: b for b in bullets}
-    ordered = sorted(
-        ((by_id[bid], text) for bid, text in replacements.items() if bid in by_id),
-        key=lambda pair: pair[0].content_start,
-        reverse=True,
-    )
-    result = source
-    for bullet, text in ordered:
-        safe = prepare_replacement_text(bullet.text, text)
-        result = result[: bullet.content_start] + safe + result[bullet.content_end :]
-    return result
-
-
-# ---------------------------------------------------------------------------
-# Validation
-# ---------------------------------------------------------------------------
-
-
-def word_count(text: str) -> int:
-    return len(text.split())
-
-
-def within_length(original: Bullet, new_text: str) -> tuple[bool, str]:
-    ow, oc = original.word_count, original.char_count
-    nw, nc = word_count(new_text), len(new_text)
-    if ow == 0:
-        word_ok = nw == 0
-    else:
-        word_ok = abs(nw - ow) / ow <= WORD_TOLERANCE
-    if oc == 0:
-        char_ok = nc == 0
-    else:
-        char_ok = abs(nc - oc) / oc <= CHAR_TOLERANCE
-    if word_ok and char_ok:
-        return True, ""
-    reasons = []
-    if not word_ok:
-        reasons.append(f"words {nw} vs {ow} (±{int(WORD_TOLERANCE * 100)}%)")
-    if not char_ok:
-        reasons.append(f"chars {nc} vs {oc} (±{int(CHAR_TOLERANCE * 100)}%)")
-    return False, "; ".join(reasons)
-
-
-def has_structural_latex(text: str) -> bool:
-    return any(re.search(pat, text) for pat in STRUCTURAL_LATEX_PATTERNS)
-
-
-def validate_replacements(
-    bullets: list[Bullet],
-    replacements: dict[str, str],
-) -> tuple[dict[str, str], dict[str, str], list[str]]:
-    """Return (accepted, length_failures, hard_errors)."""
-    by_id = {b.id: b for b in bullets}
-    accepted: dict[str, str] = {}
-    length_failures: dict[str, str] = {}
-    hard_errors: list[str] = []
-
-    for bid, text in replacements.items():
-        if bid not in by_id:
-            hard_errors.append(f"Unknown bullet ID: {bid}")
-            continue
-        if not text or not text.strip():
-            hard_errors.append(f"Empty replacement text for {bid}")
-            continue
-        if has_structural_latex(text):
-            hard_errors.append(f"Structural LaTeX not allowed in {bid}")
-            continue
-        ok, _reason = within_length(by_id[bid], text)
-        if not ok:
-            length_failures[bid] = text
-            continue
-        accepted[bid] = text
-
-    return accepted, length_failures, hard_errors
-
-
-# ---------------------------------------------------------------------------
-# Claude helpers
-# ---------------------------------------------------------------------------
-
-
-def extract_json(text: str) -> dict | list:
-    """Parse JSON from model output, stripping optional markdown fences."""
-    cleaned = text.strip().lstrip("\ufeff")
-    fence = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", cleaned)
-    if fence:
-        cleaned = fence.group(1).strip()
-
-    candidates = [cleaned]
-
-    # LLMs sometimes emit invalid \' escapes inside JSON strings.
-    if "\\'" in cleaned:
-        candidates.append(cleaned.replace("\\'", "'"))
-
-    # Normalize curly quotes that occasionally break parsers.
-    normalized = (
-        cleaned.replace("\u201c", '"')
-        .replace("\u201d", '"')
-        .replace("\u2018", "'")
-        .replace("\u2019", "'")
-    )
-    if normalized != cleaned:
-        candidates.append(normalized)
-        if "\\'" in normalized:
-            candidates.append(normalized.replace("\\'", "'"))
-
-    errors: list[str] = []
-    decoder = json.JSONDecoder()
-    for candidate in candidates:
-        try:
-            return json.loads(candidate)
-        except json.JSONDecodeError as exc:
-            errors.append(str(exc))
-        # Parse first JSON value, ignore trailing junk
-        for opener in ("{", "["):
-            start = candidate.find(opener)
-            if start == -1:
-                continue
-            try:
-                value, _ = decoder.raw_decode(candidate[start:])
-                return value
-            except json.JSONDecodeError as exc:
-                errors.append(str(exc))
-
-    detail = errors[-1] if errors else "unknown parse error"
-    raise TailorError(
-        f"Malformed model JSON response ({detail}):\n{text[:800]}"
-    )
-
-def _extract_claude_result(stdout: str) -> str:
-    """Read Claude --output-format json payload and return its result field."""
-    try:
-        payload = json.loads(stdout)
-    except json.JSONDecodeError as exc:
-        raise TailorError(
-            "Claude returned non-JSON output; rerun with a simpler prompt or try again."
-        ) from exc
-    result = payload.get("result") if isinstance(payload, dict) else None
-    if not isinstance(result, str) or not result.strip():
-        raise TailorError("Claude returned an empty result.")
-    return result.strip()
-
-
-def model_json(model: str, system: str, user: str, max_tokens: int = 8192) -> dict | list:
-    """Call local Claude Code CLI in print mode and parse structured JSON output."""
-    del max_tokens  # Claude CLI handles output limits internally.
-
-    if shutil.which("claude") is None:
-        raise TailorError(
-            "Claude CLI not found on PATH. Install Claude Code and ensure `claude` works in this shell."
-        )
-
-    command = [
-        "claude",
-        "-p",
-        "--output-format",
-        "json",
-        "--permission-mode",
-        "dontAsk",
-        "--tools",
-        "",
-        "--model",
-        model,
-        "--system-prompt",
-        system,
-        user,
-    ]
-
-    last_error: Exception | None = None
-    for attempt in range(3):
-        try:
-            proc = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-            )
-        except OSError as exc:
-            raise TailorError(f"Failed to run Claude CLI: {exc}") from exc
-
-        if proc.returncode == 0:
-            raw = _extract_claude_result(proc.stdout)
-            return extract_json(raw)
-
-        stderr = (proc.stderr or "").strip()
-        stdout = (proc.stdout or "").strip()
-        detail = stderr or stdout or f"exit code {proc.returncode}"
-        last_error = TailorError(detail)
-
-        if any(token in detail.lower() for token in ("429", "rate limit", "overloaded")) and attempt < 2:
-            wait_s = 8 * (attempt + 1)
-            print(f"  Claude rate limited; retrying in {wait_s}s...")
-            import time
-
-            time.sleep(wait_s)
-            continue
-
-        break
-
-    raise TailorError(f"Claude CLI error: {last_error}")
-
-
-ANALYSIS_SYSTEM = """You analyze job descriptions to guide resume tailoring.
-You do NOT rewrite resumes.
-Return ONLY valid JSON (no markdown) with this shape:
-{
-  "priorities": ["..."],
-  "important_keywords": ["..."],
-  "responsibilities": ["..."]
-}
-Keep each list concise (about 5-10 items). Focus on what matters most for matching.
-Only include technologies/skills that appear in the job description."""
-
-TAILOR_SYSTEM = """You tailor resume bullet wording for a specific job.
-You do NOT generate a new resume and you do NOT output LaTeX.
-
-GOAL: Rewrite as many bullets as legitimately can be improved so the resume reads like
-it was written for this job, not just lightly polished. Restructure clauses, reorder
-what comes first, swap in the job description's terminology for equivalent concepts,
-and shift emphasis toward what the role cares about. Aggressive rewriting is
-encouraged as long as every fact stays true.
-
-HARD RULES (never violate):
-1. Never invent technologies, metrics, employers, or responsibilities the original
-   bullet does not support.
-2. Never claim a new capability, tool, or scope beyond what the original bullet shows.
-3. Only draw on information already present in the resume bullets provided.
-4. Preserve existing metrics/numbers whenever they appear.
-5. Do not add, remove, combine, or split bullets.
-6. Target approximately the same length: word count ±15%, character count ±20%.
-7. Do not change implied seniority, or turn an accomplishment into a mere responsibility.
-8. Return plain bullet text only — no \\section, \\begin, \\end, \\documentclass, or other structural LaTeX.
-9. Existing LaTeX fragments in bullets (e.g. \\textbf{...}, \\%, \\&) may be preserved if still needed.
-
-ENCOURAGED (use freely within the hard rules above):
-- Reorder clauses within a bullet to lead with the part most relevant to this job.
-- Replace generic phrasing with the job description's terminology when it describes
-  the same underlying fact (e.g. "REST APIs" and "RESTful APIs" are the same claim;
-  "built" and "engineered" are the same claim at the same seniority).
-- Re-emphasize which part of the accomplishment is highlighted, as long as the
-  underlying fact doesn't change.
-- Rewrite most or all bullets if the job description gives you real material to work
-  with — don't hold back just because a bullet's current wording is passable.
-- Avoid generic corporate/AI buzzword stuffing — tailoring should read as more
-  specific and relevant, not vaguer.
-
-Only omit a bullet from your response if you genuinely have nothing useful to change
-about it for this job.
-
-Return ONLY valid JSON (no markdown):
-{
-  "replacements": [
-    {"id": "bullet_1", "text": "..."}
-  ]
-}"""
-
-CORRECTION_SYSTEM = """You fix resume bullet replacements that violate length constraints.
-Do not invent facts. Keep meaning identical to the proposed text, but adjust length
-to match the original word count (±15%) and character count (±20%).
-Return ONLY valid JSON:
-{
-  "replacements": [
-    {"id": "bullet_1", "text": "..."}
-  ]
-}"""
-
-FACTUALITY_SYSTEM = """You check whether a proposed resume bullet introduces factual
-claims that cannot be supported by the original bullet.
-
-Fail ONLY if the proposed text adds something genuinely new: a technology, tool,
-employer, metric/number, project, responsibility, or achievement that is not present
-or clearly implied by the original bullet.
-
-Pass everything else, including:
-- Synonyms or closely related terminology for the same underlying fact
-  (e.g. "REST APIs" -> "RESTful APIs", "built" -> "engineered", "used" -> "leveraged").
-- Reordering, re-emphasis, or restructuring of the same facts.
-- Minor wording changes that don't add new claims.
-- Standard categorization of a named tool/technology that is already in the original
-  bullet, even if the category word itself doesn't appear verbatim (e.g. a bullet
-  naming "CodeDeploy canaries" may be described as "CI/CD", a bullet naming
-  "Elasticsearch" may be described as "search infrastructure", a bullet naming
-  "Lambda"/"API Gateway" may be described as "serverless"). This is allowed only when
-  the named tool stays the original tool — do not allow this reasoning to justify
-  swapping in a different tool, adding a new one, or adding a metric.
-
-Be permissive: tailoring wording to match a job description's language is expected
-and desired. Only fail a bullet if a reasonable person would say it now claims a new
-tool, employer, metric, or responsibility the original didn't support.
-
-Return ONLY valid JSON:
-{
-  "results": [
-    {"id": "bullet_1", "passed": true, "reason": "..."}
-  ]
-}"""
-
-
-def analyze_job(model: str, job: str, resume: str) -> dict:
-    user = (
-        "Job description:\n"
-        f"{job}\n\n"
-        "Full resume LaTeX (for context only — do not rewrite):\n"
-        f"{resume}\n\n"
-        "Return the analysis JSON."
-    )
-    data = model_json(model, ANALYSIS_SYSTEM, user, max_tokens=2048)
-    if not isinstance(data, dict):
-        raise TailorError("Job analysis response was not a JSON object.")
-    for key in ("priorities", "important_keywords", "responsibilities"):
-        if key not in data or not isinstance(data[key], list):
-            data[key] = []
-    return data
-
-
-def tailor_bullets(
-    model: str,
-    job: str,
-    analysis: dict,
-    bullets: list[Bullet],
-) -> dict[str, str]:
-    bullet_payload = [
-        {
-            "id": b.id,
-            "text": b.text,
-            "word_count": b.word_count,
-            "char_count": b.char_count,
-        }
-        for b in bullets
-    ]
-    user = (
-        "Job description:\n"
-        f"{job}\n\n"
-        "Extracted priorities / keywords / responsibilities:\n"
-        f"{json.dumps(analysis, indent=2)}\n\n"
-        "Resume bullets to consider (preserve IDs):\n"
-        f"{json.dumps(bullet_payload, indent=2)}\n\n"
-        "Return JSON with only bullets that should change."
-    )
-    data = model_json(model, TAILOR_SYSTEM, user, max_tokens=8192)
-    return _parse_replacements_payload(data)
-
-
-def correct_lengths(
-    model: str,
-    bullets: list[Bullet],
-    failing: dict[str, str],
-) -> dict[str, str]:
-    by_id = {b.id: b for b in bullets}
-    payload = []
-    for bid, text in failing.items():
-        orig = by_id[bid]
-        payload.append(
+def resume_payload(doc: Document) -> dict:
+    sections = []
+    for section in doc.mutable_sections:
+        sections.append(
             {
-                "id": bid,
-                "original_text": orig.text,
-                "original_word_count": orig.word_count,
-                "original_char_count": orig.char_count,
-                "proposed_text": text,
-                "proposed_word_count": word_count(text),
-                "proposed_char_count": len(text),
+                "s": section.name,
+                "e": [
+                    {
+                        "id": entry.id,
+                        "hdr": " | ".join(f for f in entry.fields if f),
+                        "b": [{"id": b.id, "t": b.text} for b in entry.bullets],
+                    }
+                    for entry in section.entries
+                ],
             }
         )
-    user = (
-        "These replacements failed length checks. Fix length only; keep facts:\n"
-        f"{json.dumps(payload, indent=2)}\n\n"
-        "Return corrected replacements JSON."
-    )
-    data = model_json(model, CORRECTION_SYSTEM, user, max_tokens=4096)
-    return _parse_replacements_payload(data)
-
-
-def check_factuality(
-    model: str,
-    bullets: list[Bullet],
-    replacements: dict[str, str],
-) -> dict[str, str]:
-    """Return only replacements that pass factuality."""
-    if not replacements:
-        return {}
-    by_id = {b.id: b for b in bullets}
-    payload = [
-        {"id": bid, "original": by_id[bid].text, "proposed": text}
-        for bid, text in replacements.items()
-    ]
-    user = (
-        "Check each pair for unsupported factual claims:\n"
-        f"{json.dumps(payload, indent=2)}\n\n"
-        "Return factuality results JSON."
-    )
-    data = model_json(model, FACTUALITY_SYSTEM, user, max_tokens=4096)
-    if not isinstance(data, dict) or "results" not in data:
-        raise TailorError("Factuality response missing 'results'.")
-
-    reported_ids = {
-        r.get("id") for r in data["results"] if isinstance(r, dict)
+    return {
+        "lines": doc.est_lines,
+        "budget_note": "est_lines = ceil(len/120) per bullet + 3 per entry",
+        "skills": current_skills(doc),
+        "sections": sections,
     }
-    passed: dict[str, str] = {}
-    for item in data["results"]:
-        if not isinstance(item, dict):
-            continue
-        bid = item.get("id")
-        if bid not in replacements:
-            continue
-        if item.get("passed") is True:
-            passed[bid] = replacements[bid]
-        else:
-            reason = item.get("reason", "failed factuality check")
-            print(f"  Keeping original {bid}: {reason}")
-
-    for bid in replacements:
-        if bid not in reported_ids:
-            print(f"  Keeping original {bid}: missing factuality result")
-    return passed
 
 
-def _parse_replacements_payload(data: dict | list) -> dict[str, str]:
-    if isinstance(data, list):
-        items = data
-    elif isinstance(data, dict):
-        items = data.get("replacements", [])
-    else:
-        raise TailorError("Unexpected replacements JSON shape.")
-    if not isinstance(items, list):
-        raise TailorError("'replacements' must be a list.")
-    out: dict[str, str] = {}
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        bid = item.get("id")
-        text = item.get("text")
-        if isinstance(bid, str) and isinstance(text, str):
-            out[bid] = text
-    return out
+def current_skills(doc: Document) -> dict[str, str]:
+    section = doc.section("SKILLS")
+    if section is None:
+        return {}
+    raw = doc.source[section.start : section.end]
+    return {m.group(2).strip(): m.group(4).strip() for m in SKILL_LINE_RE.finditer(raw)}
+
+
+def trim_payload(doc: Document) -> list[dict]:
+    return [
+        {"id": b.id, "e": entry.id, "t": b.text, "n": len(entry.bullets)}
+        for section in doc.mutable_sections
+        for entry in section.entries
+        for b in entry.bullets
+    ]
 
 
 # ---------------------------------------------------------------------------
-# Output / PDF
+# PDF compilation
 # ---------------------------------------------------------------------------
 
 
-def backup_existing_output(output_dir: Path) -> None:
-    tex = output_dir / f"{OUTPUT_BASENAME}.tex"
-    pdf = output_dir / f"{OUTPUT_BASENAME}.pdf"
-    if not tex.exists() and not pdf.exists():
-        return
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_dir = output_dir / f"backup_{stamp}"
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    if tex.exists():
-        shutil.move(str(tex), str(backup_dir / f"{OUTPUT_BASENAME}.tex"))
-    if pdf.exists():
-        shutil.move(str(pdf), str(backup_dir / f"{OUTPUT_BASENAME}.pdf"))
-    print(f"Backed up previous output to {backup_dir}")
-
-
-def compile_pdf(tex_path: Path, pdf_dest: Path) -> None:
-    """Compile with pdflatex in a temp dir; copy PDF to pdf_dest."""
+def compile_pdf(tex_source: str, pdf_dest: Path | None) -> tuple[int, str]:
+    """Compile LaTeX. Returns (page_count, log_tail). page_count is 0 on failure."""
     if shutil.which("pdflatex") is None:
-        raise TailorError(
-            "pdflatex not found on PATH. Install MiKTeX or TeX Live and retry.\n"
-            f"The tailored .tex was saved at: {tex_path}"
-        )
+        raise TailorError("pdflatex not found on PATH. Install MiKTeX or TeX Live.")
 
     with tempfile.TemporaryDirectory(prefix="resume_tailor_") as tmp:
         tmp_dir = Path(tmp)
         tmp_tex = tmp_dir / f"{OUTPUT_BASENAME}.tex"
-        shutil.copy2(tex_path, tmp_tex)
+        tmp_tex.write_text(tex_source, encoding="utf-8")
 
-        cmd = [
-            "pdflatex",
-            "-interaction=nonstopmode",
-            "-halt-on-error",
-            f"{OUTPUT_BASENAME}.tex",
-        ]
         try:
             proc = subprocess.run(
-                cmd,
+                ["pdflatex", "-interaction=nonstopmode", "-halt-on-error",
+                 f"{OUTPUT_BASENAME}.tex"],
                 cwd=tmp_dir,
                 capture_output=True,
                 text=True,
@@ -658,31 +176,65 @@ def compile_pdf(tex_path: Path, pdf_dest: Path) -> None:
                 errors="replace",
             )
         except OSError as exc:
-            raise TailorError(
-                f"Failed to run pdflatex: {exc}\n"
-                f"The tailored .tex was saved at: {tex_path}"
-            ) from exc
+            raise TailorError(f"Failed to run pdflatex: {exc}") from exc
 
         tmp_pdf = tmp_dir / f"{OUTPUT_BASENAME}.pdf"
+        log_path = tmp_dir / f"{OUTPUT_BASENAME}.log"
+        log_text = (
+            log_path.read_text(encoding="utf-8", errors="replace")
+            if log_path.exists()
+            else (proc.stdout or "") + (proc.stderr or "")
+        )
+
         if proc.returncode != 0 or not tmp_pdf.exists():
-            log_path = tmp_dir / f"{OUTPUT_BASENAME}.log"
-            if log_path.exists():
-                log_text = log_path.read_text(encoding="utf-8", errors="replace")
-                log_tail = "\n".join(log_text.splitlines()[-40:])
-            else:
-                log_tail = (proc.stdout or "")[-2000:] + "\n" + (proc.stderr or "")[-2000:]
-            raise TailorError(
-                "PDF compilation failed. The .tex was generated but PDF compilation failed.\n"
-                f"TeX file: {tex_path}\n"
-                f"Compiler output (tail):\n{log_tail}"
-            )
+            return 0, "\n".join(log_text.splitlines()[-40:])
 
-        shutil.copy2(tmp_pdf, pdf_dest)
+        match = PAGE_COUNT_RE.search(log_text) or PAGE_COUNT_RE.search(proc.stdout or "")
+        pages = int(match.group(1)) if match else 1
+
+        if pdf_dest is not None:
+            shutil.copy2(tmp_pdf, pdf_dest)
+        return pages, ""
 
 
 # ---------------------------------------------------------------------------
-# Main
+# Output helpers
 # ---------------------------------------------------------------------------
+
+
+def build_run_slug(company: str, job_title: str) -> str:
+    """Folder name for one tailoring run: <company>_<job-title>, best effort."""
+    parts = []
+    if company.strip():
+        parts.append(slugify(company))
+    if job_title.strip():
+        parts.append(slugify(job_title))
+    if parts:
+        return "_".join(parts)
+    return f"job_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+
+def claim_run_dir(base: Path, slug: str) -> Path:
+    """Atomically create a fresh, never-before-used directory under `base`.
+
+    Directory creation (mkdir on a not-yet-existing path) is atomic at the OS
+    level, so two `tailor.py` processes started at the same instant for the
+    same company + title race safely here: only one wins a given candidate
+    name, the other's mkdir raises FileExistsError and it retries the next
+    suffix. This - not a lock file - is what makes running several instances
+    of the tool in parallel safe: every run gets its own untouched folder and
+    none of them ever overwrite another run's .tex/.pdf.
+    """
+    base.mkdir(parents=True, exist_ok=True)
+    candidate = base / slug
+    suffix = 2
+    while True:
+        try:
+            candidate.mkdir(parents=False, exist_ok=False)
+            return candidate
+        except FileExistsError:
+            candidate = base / f"{slug}-{suffix}"
+            suffix += 1
 
 
 def read_text(path: Path, label: str) -> str:
@@ -691,135 +243,297 @@ def read_text(path: Path, label: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def print_changes(log, doc: Document) -> None:
+    print()
+    print("Plan applied:")
+    print(f"  {len(log.rewritten):>3} bullets enriched with a fact/keyword")
+    print(f"  {len(log.kept):>3} bullets kept as-is")
+    if log.dropped_bullets:
+        print(f"  {len(log.dropped_bullets):>3} bullets dropped: {', '.join(log.dropped_bullets)}")
+    for line in log.added_bullets:
+        print(f"    + bullet {line}")
+    for line in log.added_entries:
+        print(f"    + entry  {line}")
+    for entry_id in log.dropped_entries:
+        print(f"    - entry  {entry_id}")
+    for name in log.reordered:
+        print(f"    ~ reordered {name}")
+    if log.skills_updated:
+        print("    ~ skills retuned")
+    if log.facts_used:
+        print(f"    ~ facts woven in: {', '.join(log.facts_used)}")
+    for warning in log.warnings:
+        print(f"  ! {warning}")
+    print(f"  estimated {doc.est_lines} rendered lines")
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+
 def main(argv: list[str] | None = None) -> int:
     load_dotenv()
 
     parser = argparse.ArgumentParser(
-        description="Tailor LaTeX resume bullets to a job description using local Claude Code CLI."
+        description="Tailor a LaTeX resume to a job description using the Claude Code CLI."
     )
-    parser.add_argument("--resume", default=DEFAULT_RESUME, help="Path to master .tex resume")
+    parser.add_argument(
+        "--resume",
+        default=None,
+        help="Path to master .tex resume. If omitted, auto-selected from the job "
+        f"description: {RESUME_1YO} when 1+ years of experience is required, "
+        f"otherwise {RESUME_NEW_GRAD}.",
+    )
     parser.add_argument("--job", default=DEFAULT_JOB, help="Path to job description text file")
-    parser.add_argument("--output", default=DEFAULT_OUTPUT, help="Output directory")
+    parser.add_argument(
+        "--output",
+        default=DEFAULT_OUTPUT,
+        help="Base output directory; each run gets its own <company>_<job-title> "
+        "subfolder inside it (default 'output')",
+    )
+    parser.add_argument(
+        "--company",
+        default="",
+        help="Override the company name used for the output folder (skips model extraction)",
+    )
+    parser.add_argument(
+        "--job-title",
+        default="",
+        help="Override the job title used for the output folder (skips model extraction)",
+    )
+    parser.add_argument("--bank", default=DEFAULT_BANK, help="Content bank directory")
+    parser.add_argument(
+        "--max-pages", type=int, default=MAX_PAGES, help="Page ceiling (default 1)"
+    )
+    parser.add_argument(
+        "--line-budget",
+        type=int,
+        default=LINE_BUDGET,
+        help=f"Estimated rendered lines the planner should target (default {LINE_BUDGET})",
+    )
+    parser.add_argument(
+        "--no-bank", action="store_true", help="Ignore the content bank for this run"
+    )
+    parser.add_argument(
+        "--no-drop-entries",
+        action="store_true",
+        help="Never remove an existing experience or project",
+    )
+    parser.add_argument(
+        "--list-ids", action="store_true", help="Print resume entry/bullet ids and exit"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Write the .tex but skip PDF compilation"
+    )
+    parser.add_argument("--save-plan", help="Write the raw plan JSON to this path")
     args = parser.parse_args(argv)
 
-    resume_path = Path(args.resume)
-    job_path = Path(args.job)
-    output_dir = Path(args.output)
     model = os.getenv("CLAUDE_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    plan_model = os.getenv("CLAUDE_PLAN_MODEL", DEFAULT_PLAN_MODEL).strip() or DEFAULT_PLAN_MODEL
 
     try:
-        print("Reading resume...")
+        job_text: str | None = None
+        if args.resume:
+            resume_path = Path(args.resume)
+        elif args.list_ids:
+            # No job description needed just to list ids; companies/ids are the
+            # same across templates, so the new-grad template is a fine default.
+            resume_path = Path(RESUME_NEW_GRAD)
+        else:
+            job_text = read_text(Path(args.job), "job description").strip()
+            if not job_text:
+                raise TailorError(f"Job description is empty: {args.job}")
+            resume_path = Path(select_base_resume(job_text))
+            years = min_years_required(job_text)
+            if years is not None:
+                reason = f"posting asks for {years}+ year(s) of experience"
+            elif _NEW_GRAD_SIGNS_RE.search(job_text):
+                reason = "posting signals new grad / entry level"
+            else:
+                reason = "no experience requirement detected"
+            print(f"Auto-selected base resume: {resume_path} ({reason})")
+
         resume_source = read_text(resume_path, "resume")
-        bullets = parse_resume_items(resume_source)
-        if not bullets:
-            raise TailorError(
-                f"No \\resumeItem{{...}} bullets found in {resume_path}."
+        doc = parse_resume(resume_source)
+        baseline_lines = doc.est_lines
+
+        if args.list_ids:
+            for section in doc.mutable_sections:
+                print(f"\n[{section.name}]")
+                for entry in section.entries:
+                    print(f"  {entry.id}   ({entry.fields[0]})")
+                    for bullet in entry.bullets:
+                        print(f"      {bullet.id}")
+            print(
+                "\nUse these entry ids in content/extra_bullets.yaml under `entry:`"
+                "\nand in content/facts.yaml under `scope:`."
             )
-        print(f"Found {len(bullets)} resume bullets.\n")
+            return 0
 
-        print("Reading job description...")
-        job_text = read_text(job_path, "job description").strip()
-        if not job_text:
-            raise TailorError(f"Job description is empty: {job_path}")
-        print()
-
-        print("Analyzing job description with Claude...")
-        analysis = analyze_job(model, job_text, resume_source)
-        priorities = analysis.get("priorities") or []
-        print(f"Identified {len(priorities)} key priorities.\n")
-
-        print("Tailoring resume bullets...")
-        raw_replacements = tailor_bullets(model, job_text, analysis, bullets)
-
-        print("Validating changes...")
-        accepted, length_failures, hard_errors = validate_replacements(
-            bullets, raw_replacements
+        line_budget = max(args.line_budget, baseline_lines)
+        total_bullets = sum(len(e.bullets) for e in doc.all_entries())
+        print(
+            f"Resume: {len(doc.all_entries())} entries, {total_bullets} bullets, "
+            f"~{baseline_lines} rendered lines (budget {line_budget})."
         )
-        if hard_errors:
-            raise TailorError("Validation failed:\n  - " + "\n  - ".join(hard_errors))
 
-        if length_failures:
+        bank = load_bank(Path(args.bank))
+        if args.no_bank:
+            bank.entries.clear()
+            bank.bullets.clear()
+            bank.facts.clear()
+        entry_ids = [e.id for e in doc.all_entries()]
+        payload_bank = bank_payload(bank, entry_ids)
+        if bank.is_empty:
+            print("Content bank: empty (nothing to pull in).")
+        else:
             print(
-                f"  {len(length_failures)} bullet(s) outside length tolerance; "
-                "requesting one correction pass..."
+                f"Content bank: {len(bank.entries)} extra entries, "
+                f"{len(bank.bullets)} extra bullets, {len(bank.facts)} facts."
             )
+
+        if job_text is None:
+            job_text = read_text(Path(args.job), "job description").strip()
+            if not job_text:
+                raise TailorError(f"Job description is empty: {args.job}")
+
+        enrich_hints = suggest_enrichments(doc, bank, [], job_text)
+        if enrich_hints:
+            print(f"  Posting-matched fact hints: {len(enrich_hints)}")
+
+        print(f"\nTailoring ({plan_model})...")
+        analysis, plan = planner.analyze_and_plan(
+            plan_model,
+            job_text,
+            resume_payload(doc),
+            payload_bank,
+            line_budget,
+            enrich_hints=enrich_hints,
+        )
+        plan = planner.merge_enrich_hints(plan, enrich_hints)
+        archetype = analysis.get("role_archetype") or "unspecified"
+        print(f"  Role archetype: {archetype}")
+        print(f"  Seniority: {analysis.get('seniority') or 'unspecified'}")
+        must = analysis.get("must_have_keywords") or []
+        if must:
+            print(f"  Must-have keywords: {', '.join(must[:8])}")
+
+        company = args.company.strip() or analysis.get("company", "").strip()
+        job_title = args.job_title.strip() or analysis.get("job_title", "").strip()
+        run_slug = build_run_slug(company, job_title)
+        run_dir = claim_run_dir(Path(args.output), run_slug)
+        print(f"  Output folder: {run_dir}")
+
+        if args.save_plan:
+            Path(args.save_plan).write_text(
+                json.dumps({"analysis": analysis, "plan": plan}, indent=2),
+                encoding="utf-8",
+            )
+            print(f"  Plan saved to {args.save_plan}")
+        strategy = plan.get("strategy")
+        if isinstance(strategy, str) and strategy.strip():
+            print(f"\n  Strategy: {strategy.strip()}")
+
+        log = apply_plan(
+            doc,
+            bank,
+            plan,
+            allow_drop_entries=not args.no_drop_entries,
+            keywords=list(must) + list(analysis.get("nice_to_have_keywords") or []),
+            job_text=job_text,
+        )
+        enforce_entry_requirements(
+            doc, bank, log, allow_drop_entries=not args.no_drop_entries
+        )
+        print_changes(log, doc)
+        claimed = plan.get("est_lines") or plan.get("estimated_total_lines")
+        if isinstance(claimed, int) and abs(claimed - doc.est_lines) > 4:
+            print(f"  ! planner estimated {claimed} lines but the plan measures {doc.est_lines}")
+
+        for name in MUTABLE_SECTIONS:
+            section = doc.section(name)
+            if section is not None and not section.entries:
+                raise TailorError(f"Section '{name}' ended up empty; aborting.")
+
+        # The planner reliably underestimates its own line total, but our measured
+        # estimate is trustworthy. Trimming from the accurate number here usually
+        # saves a whole compile-and-retry cycle.
+        if doc.est_lines > line_budget:
+            excess = doc.est_lines - line_budget
+            print(f"\nPlan is ~{excess} line(s) over budget. Pre-trimming...")
             try:
-                corrected = correct_lengths(model, bullets, length_failures)
-                accepted2, still_failing, hard2 = validate_replacements(
-                    bullets, corrected
-                )
-                if hard2:
-                    print(
-                        "  Correction pass returned invalid replacements; "
-                        "keeping originals for those bullets."
-                    )
-                    for bid in length_failures:
-                        print(f"  Keeping original {bid}: correction rejected")
-                else:
-                    accepted.update(accepted2)
-                    for bid in still_failing:
-                        print(
-                            f"  Keeping original {bid}: still outside length tolerance"
-                        )
-                    for bid in length_failures:
-                        if bid not in accepted2 and bid not in still_failing:
-                            print(f"  Keeping original {bid}: omitted from correction")
+                trim = planner.trim_resume(model, trim_payload(doc), excess)
+                shortened, dropped = apply_trim(doc, trim)
+                print(f"  Shortened {shortened}, dropped {dropped} bullet(s); "
+                      f"now ~{doc.est_lines} lines.")
             except TailorError as exc:
-                print(f"  Correction pass failed ({exc}); keeping original bullets.")
-                for bid in length_failures:
-                    print(f"  Keeping original {bid}: correction unavailable")
+                print(f"  Pre-trim failed ({exc}); continuing.")
 
-        print("Running factuality checks...")
-        try:
-            accepted = check_factuality(model, bullets, accepted)
-        except TailorError as exc:
-            print(
-                f"  Factuality check skipped due to Claude error ({exc}). "
-                "Proceeding with length-validated replacements."
-            )
+        tailored = render_document(doc)
 
-        final: dict[str, str] = {}
-        by_id = {b.id: b for b in bullets}
-        for bid, text in accepted.items():
-            if text.strip() != by_id[bid].text.strip():
-                final[bid] = text
+        tex_out = run_dir / f"{OUTPUT_BASENAME}.tex"
+        pdf_out = run_dir / f"{OUTPUT_BASENAME}.pdf"
 
-        updated = len(final)
-        unchanged = len(bullets) - updated
-        print(f"{updated} bullets updated.")
-        print(f"{unchanged} bullets unchanged.\n")
-        print("Validation passed.\n")
+        if args.dry_run:
+            tex_out.write_text(tailored, encoding="utf-8")
+            print(f"\nDry run: wrote {tex_out} (skipped PDF).")
+            return 0
 
-        output_dir.mkdir(parents=True, exist_ok=True)
-        backup_existing_output(output_dir)
-
-        tailored_source = apply_replacements(resume_source, bullets, final)
-        after_bullets = parse_resume_items(tailored_source)
-        if len(after_bullets) != len(bullets):
+        print("\nCompiling...")
+        pages, log_tail = compile_pdf(tailored, None)
+        if pages == 0:
+            tex_out.write_text(tailored, encoding="utf-8")
             raise TailorError(
-                f"Bullet count changed after apply ({len(bullets)} -> {len(after_bullets)}). Aborting write."
+                "PDF compilation failed. The .tex was saved at "
+                f"{tex_out}\nCompiler output (tail):\n{log_tail}"
             )
+        print(f"  {pages} page(s).")
 
-        tex_out = output_dir / f"{OUTPUT_BASENAME}.tex"
-        pdf_out = output_dir / f"{OUTPUT_BASENAME}.pdf"
+        # --- fit loop: real page count is the ground truth ------------------
+        for attempt in range(1, MAX_TRIM_PASSES + 1):
+            if pages <= args.max_pages:
+                break
+            # Target the measured excess over the calibrated budget, escalating a
+            # little each pass. A fixed target either overshoots (needlessly
+            # cutting bullets) or crawls, depending on how far over we are.
+            overflow = max(3, doc.est_lines - line_budget) + 2 * (attempt - 1)
+            print(f"\nOver budget. Trim pass {attempt} (target: -{overflow} lines)...")
+            try:
+                trim = planner.trim_resume(model, trim_payload(doc), overflow)
+            except TailorError as exc:
+                print(f"  Trim pass failed ({exc}); keeping current version.")
+                break
+            shortened, dropped = apply_trim(doc, trim)
+            if shortened == 0 and dropped == 0:
+                print("  Trim pass produced no changes; stopping.")
+                break
+            print(f"  Shortened {shortened}, dropped {dropped} bullet(s).")
+            tailored = render_document(doc)
+            pages, log_tail = compile_pdf(tailored, None)
+            if pages == 0:
+                raise TailorError(f"Compilation failed after trimming:\n{log_tail}")
+            print(f"  Now {pages} page(s).")
 
-        print("Writing:")
-        print(f"  {tex_out}")
-        tex_out.write_text(tailored_source, encoding="utf-8")
+        pages, log_tail = compile_pdf(tailored, pdf_out)
+        if pages == 0:
+            tex_out.write_text(tailored, encoding="utf-8")
+            raise TailorError(f"Final compilation failed:\n{log_tail}")
+
+        tex_out.write_text(tailored, encoding="utf-8")
 
         if resume_path.read_text(encoding="utf-8") != resume_source:
-            raise TailorError("Refusing to continue: master resume changed unexpectedly.")
+            raise TailorError("Master resume changed during the run; aborting.")
 
-        print("\nCompiling PDF...")
-        try:
-            compile_pdf(tex_out, pdf_out)
-        except TailorError as exc:
-            print(f"Error: {exc}")
-            return 1
-
-        print("PDF compilation successful.\n")
+        print()
+        if pages > args.max_pages:
+            print(
+                f"WARNING: still {pages} pages after {MAX_TRIM_PASSES} trim passes. "
+                "Consider trimming the content bank selections manually."
+            )
         print("Created:")
-        print(f"  {pdf_out}")
+        print(f"  {tex_out}")
+        print(f"  {pdf_out}  ({pages} page)")
         return 0
 
     except TailorError as exc:
