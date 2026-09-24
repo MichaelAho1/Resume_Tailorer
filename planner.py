@@ -166,20 +166,60 @@ Each enrich item: {"id": "<bullet_id>", "fact": "<fact_id>", "text": "<optional>
 If `text` is omitted, the tool inserts the fact automatically. Prefer citing the
 fact id; only supply `text` when you need a specific phrasing.
 
-Weave facts naturally: "against Snowflake", "(Python/TypeScript)", "and Splunk alerts".
-Apply every posting-relevant fact in scope — e.g. if the job asks for Python, enrich
-Capital One bullets with co_languages where Python is not already named.
+Weave facts naturally: "against Snowflake", "(Python/TypeScript)". Apply every
+posting-relevant fact in scope — e.g. if the job asks for Python, enrich Capital
+One bullets with co_languages where Python is not already named.
 
-Facts: `in` = entry id, global, or skills. `hint` names a specific bullet when set.
+If you supply a custom `text` instead of citing a fact id, its character count
+is capped at the original bullet's character count — that original length IS
+the limit, not a soft target. If your insertion adds N characters, cut at
+least N characters elsewhere in the SAME bullet first, so the result is no
+longer than the original. A rewrite that exceeds the original's length, even
+by a few characters, is rejected outright and the original is kept.
+
+Two ways to make room, in priority order:
+
+1. SUBSTITUTE, don't append, when the fact names a tool truthfully
+   interchangeable with one already in the bullet — a fact's `swap` field
+   names the exact literal term to replace. E.g. fact `co_splunk` has
+   `swap: "Integrity"`, so "using Integrity and CodeDeploy canaries" becomes
+   "using Splunk and CodeDeploy canaries", not "...Integrity and CodeDeploy
+   canaries and Splunk alerts...". A same-length-or-shorter swap always fits
+   and reads more natural than tacking a clause on.
+2. Otherwise, CUT a low-value descriptive clause — one that just restates
+   something already obvious from context — rather than hunting for filler
+   words in an already-tight bullet. Example: inserting "using Claude Code"
+   into "Developed the transactions AWS Lambda service powering Eno, Capital
+   One's AI assistant serving 5M+ customers" (108 chars) should drop the
+   appositive "Capital One's AI assistant" (Eno is already named and the
+   employer is already known from the entry header) rather than reword
+   unrelated parts: "Developed the transactions AWS Lambda service using
+   Claude Code, powering Eno, serving 5M+ customers" (100 chars). Keep every
+   other word as-is when doing this — cutting a clause is not license to
+   reword the rest.
+
+Facts: `in` = entry id, global, or skills. `hint` names a specific bullet when
+set. `swap` names a literal term in that bullet to substitute for (see above).
 
 # BANK SWAPS
 
 When posting priorities match a bank entry's tags, add it and drop something less
 relevant. Examples:
-  - client-facing / communication / interfacing with clients → consulting entries
   - trading / markets / Python scripting → stock simulator project, Python facts
   - UNIX / Linux / systems → linux_jmu on skills, Linux on skills line
-Check each bank entry's tags and `n` field against analysis priorities.
+  - C/C++, HPC, parallel/distributed computing, performance engineering, or
+    scientific computing/benchmarking → parallel_nbody project (its `requires_drop`
+    swaps out Fantasy Stock League, which has no C/C++ content and is the
+    weakest fit for this kind of posting)
+  - the role's CORE function is consulting, forward-deployed engineering,
+    solutions engineering/architecture, or customer-facing delivery →
+    consulting entries. A standard SWE posting that merely lists
+    "communication," "stakeholders," or "partnering with clients" as one
+    requirement among many is NOT enough on its own — most SWE postings say
+    that. Only add a consulting entry when the job itself is client-facing by
+    design; read that entry's `n` field, which states this explicitly.
+Check each bank entry's tags and `n` field against analysis priorities — `n`
+tells you exactly when an entry is, and isn't, a fit.
 
 Respect `drop` on bank entries — adding that entry requires dropping one listed item.
 
@@ -220,6 +260,76 @@ Rules:
 - `skills` keys must match resume payload labels exactly.
 - Analysis lists: terms from posting only, ~5-10 items each.
 - Plain bullet text; no structural LaTeX. Escaped \\% \\& \\_ OK."""
+
+
+COVER_LETTER_SYSTEM = """Write the opening paragraph of a cover letter, plus a short closing
+mention phrase. This is for Michael Aho, a Computer Science student at James
+Madison University applying to a software engineering role.
+
+The rest of the letter (which you do NOT write) already covers his background:
+Capital One (TypeScript AWS Lambda services for Eno, LLM tooling migration),
+ILS (Go/Elasticsearch distributed backend, ingestion throughput), Cross Screen
+Media (React/Django analytics platform), and QuickMarkets (a personal project:
+an accelerated stock market simulator in Django/React/AWS). Do not repeat
+these facts yourself unless directly relevant to a sentence connecting his
+background to the company - they appear later in the letter regardless.
+
+# OPENING PARAGRAPH
+
+Write 2-4 sentences, first person, in Michael's voice. It must:
+  - State he's excited to apply for the role at the company.
+  - Connect his genuine interest, background, or experience to something
+    SPECIFIC and REAL about this company - its actual product, what it builds,
+    or a technical detail from the posting (e.g. a named product, the problem
+    domain, the tech stack they use). Ground it in the job description text
+    given, not generic praise.
+  - Optionally note a tech-stack overlap between what the posting asks for and
+    what Michael has used (Python, TypeScript, JavaScript, Java, Go, SQL,
+    Django, React, AWS, Docker, PostgreSQL, Elasticsearch), only if genuinely
+    supported by the posting - don't force it.
+
+BANNED: generic flattery or filler ("thrilled", "passionate about", "dynamic
+environment", "cutting-edge", "innovative culture", "fast-paced", "leverage
+my skills", "perfect fit", "I am confident that", "excited about the
+opportunity to leverage"). No adjectives about the company you couldn't
+justify from the posting text. Write like a plainspoken engineering student,
+not a marketing bio.
+
+Avoid telltale AI writing patterns:
+  - No em dashes (—) or en dashes used as punctuation. Use a period, comma,
+    or "and"/"but" instead.
+  - No "not only X but also Y", "it's not just about X, it's about Y", or
+    other rule-of-three / false-contrast constructions.
+  - No throat-clearing transitions like "Moreover", "Furthermore",
+    "Additionally", "In today's world", "That said".
+  - Avoid words like "delve", "tapestry", "landscape", "robust", "seamless",
+    "elevate", "foster", "underscore" - these read as AI-generated.
+  - Keep sentences short and a little uneven in length, the way a student
+    writing quickly would, not uniformly balanced.
+  - Contractions (I'm, I've, it's) are fine and preferred over formal phrasing.
+
+Match the plain, concrete style of this real example
+(different company, shown only for tone/length):
+
+"I'm excited to apply for the Software Engineer role at FT Partners. I've
+always been interested in the intersection of software and finance, and I
+enjoy building reliable systems that make people's work more efficient. FT
+Base especially caught my attention because it combines technologies I've
+worked with across my internships, including Python, Django, TypeScript,
+React, PostgreSQL, and AWS."
+
+# CLOSING MENTION
+
+A short phrase (4-10 words) naming the company (and its product/team if the
+posting names one), to complete the sentence "I'd be excited to bring that
+mindset to ___." Example from the same real letter: "FT Base and the FT
+Partners engineering team". Do not invent a product name if the posting
+doesn't give one - just use "the {company} engineering team" in that case.
+
+# OUTPUT
+
+Return ONLY valid JSON (no markdown):
+{"opening_paragraph": "...", "closing_mention": "..."}"""
 
 
 TRIM_SYSTEM = """The tailored resume overflows one page. Shorten it.
@@ -384,3 +494,27 @@ def trim_resume(model: str, bullets_payload: list[dict], overflow_lines: int) ->
     if not isinstance(data, dict):
         raise TailorError("Trim response was not a JSON object.")
     return data
+
+
+def _strip_em_dashes(text: str) -> str:
+    """Defensive cleanup: the model sometimes ignores the no-em-dash instruction."""
+    text = re.sub(r"\s*[—–]\s*", ", ", text)
+    return re.sub(r"\s+,", ",", text)
+
+
+def generate_cover_letter_opening(model: str, job: str, company: str) -> tuple[str, str]:
+    """Return (opening_paragraph, closing_mention) for the cover letter."""
+    user = (
+        f"Company: {company or '(name unclear from posting; infer from context)'}\n\n"
+        f"Job description:\n{job}\n\nReturn the JSON."
+    )
+    data = model_json(model, COVER_LETTER_SYSTEM, user)
+    if not isinstance(data, dict):
+        raise TailorError("Cover letter response was not a JSON object.")
+    opening = data.get("opening_paragraph")
+    closing = data.get("closing_mention")
+    if not isinstance(opening, str) or not opening.strip():
+        raise TailorError("Cover letter response missing 'opening_paragraph'.")
+    if not isinstance(closing, str) or not closing.strip():
+        raise TailorError("Cover letter response missing 'closing_mention'.")
+    return _strip_em_dashes(opening.strip()), _strip_em_dashes(closing.strip())

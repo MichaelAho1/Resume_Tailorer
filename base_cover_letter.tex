@@ -1,0 +1,54 @@
+%-------------------------
+% Cover Letter in LaTeX
+% Author : Michael Aho
+%------------------------
+
+\documentclass[letterpaper,11pt]{article}
+
+\usepackage[empty]{fullpage}
+\usepackage[usenames,dvipsnames]{xcolor}
+\usepackage[colorlinks=true,urlcolor=MidnightBlue,linkcolor=MidnightBlue]{hyperref}
+\usepackage[english]{babel}
+\input{glyphtounicode}
+
+\pagestyle{empty}
+
+% Adjust margins (match resume)
+\addtolength{\oddsidemargin}{-0.5in}
+\addtolength{\evensidemargin}{-0.5in}
+\addtolength{\textwidth}{1in}
+\addtolength{\topmargin}{-.5in}
+\addtolength{\textheight}{1in}
+
+\urlstyle{same}
+\raggedbottom
+\raggedright
+\setlength{\parindent}{0in}
+\setlength{\parskip}{11pt}
+
+\pdfgentounicode=1
+
+\begin{document}
+
+\begin{center}
+    \textbf{\Huge \scshape Michael Aho} \\ \vspace{3pt}
+    \normalsize Leesburg, VA $|$ (703) 881-8840 $|$ michael.aho84@gmail.com
+\end{center}
+\vspace{4pt}
+
+%%DATE%%
+
+%%GREETING%%
+
+%%OPENING%%
+
+I'm currently studying Computer Science at James Madison University and have gained experience through internships and personal projects. Most recently at Capital One, I built TypeScript AWS Lambda services for Eno and helped migrate LLM tooling across multiple repositories to improve reliability for multiple teams.
+
+Previously at ILS and Cross Screen Media, I worked on backend and full-stack systems, including Go-based distributed services with Elasticsearch that improved ingestion from ~800 to 15,000 documents per second, and a React/Django analytics platform where I contributed to debugging, code reviews, and feature delivery.
+
+Outside of internships, I enjoy building projects like QuickMarkets, an accelerated stock market simulator built with Django, React, and AWS. I also enjoy working on systems where reliability and maintainability matter, and I'd be excited to bring that mindset to %%CLOSING_MENTION%%.
+
+Best,\\
+Michael Aho
+
+\end{document}

@@ -5,8 +5,9 @@ Validation here is structural rather than semantic. Anything the plan adds must
 cite a bank `source_id` that really exists, which is what guarantees new content
 traces back to something the user actually wrote. Rewrites of existing bullets
 are restricted: they must keep the original metrics and most of the original
-wording, and they must actually insert an in-scope, posting-relevant fact.
-Cosmetic paraphrases are discarded and the original bullet is kept.
+wording, stay within a few characters of the original length, and actually
+insert an in-scope, posting-relevant fact. Cosmetic paraphrases and rewrites
+that grow or shrink a bullet are discarded and the original bullet is kept.
 """
 
 from __future__ import annotations
@@ -30,6 +31,15 @@ SKILL_LINE_RE = re.compile(r"(\\textbf\s*\{)([^{}]*)(\}\s*\{:\s*)([^{}]*)(\})")
 # "against Snowflake" into an existing sentence easily clears it; rebuilding
 # the bullet from scratch does not.
 MIN_REWRITE_OVERLAP = 0.7
+
+# A bullet's original character count IS its character limit: every bullet in
+# the base resume was hand-fit to wrap the way it does, so a rewrite is never
+# allowed to grow past that count. Any insertion must be paid for by trimming
+# elsewhere in the same bullet - the model is told this in TAILOR_SYSTEM; this
+# is the code-enforced backstop for when it doesn't. Shrinking is unrestricted
+# (a shorter, faithful bullet is always fine).
+
+
 _NUMBER_RE = re.compile(
     r"\d[\d,]*(?:\.\d+)?(?:\+|k|m|b|x|%)?",
     re.IGNORECASE,
@@ -109,6 +119,31 @@ def _fact_usable_in_entry(fact: Fact, entry_id: str) -> bool:
     return fact.scope == entry_id
 
 
+def _hint_tokens(hint: str) -> list[str]:
+    return [
+        w
+        for w in re.findall(r"[a-z0-9]+", hint.lower())
+        if len(w) > 4 and w not in _STOPWORDS
+    ]
+
+
+def _fact_fits_bullet(fact: Fact, bullet_text: str) -> bool:
+    """True unless a `bullet_hint` says this fact is true of a *different* bullet.
+
+    A hint names the one piece of work a fact actually happened on (e.g. "the
+    Splunk query was part of the rollback automation"), not a style preference -
+    so weaving it into an unrelated bullet is a truthfulness problem, not a
+    taste one. No hint means the fact is scoped to the whole entry.
+    """
+    if not fact.bullet_hint:
+        return True
+    tokens = _hint_tokens(fact.bullet_hint)
+    if not tokens:
+        return True
+    bullet_l = bullet_text.lower()
+    return any(t in bullet_l for t in tokens)
+
+
 def _fact_matches_posting(fact: Fact, keywords: list[str], job_text: str) -> bool:
     haystack = f"{job_text} {' '.join(keywords)}".lower()
     if not haystack.strip():
@@ -185,7 +220,18 @@ def justified_enrichment(
     if _overlap_ratio(original, new) < MIN_REWRITE_OVERLAP:
         return False, "rewrote too much of the original wording"
 
-    relevant_facts = _posting_relevant_facts(bank, entry_id, keywords, job_text)
+    if len(new) > len(original):
+        return False, (
+            f"grew from {len(original)} to {len(new)} chars; a bullet's original "
+            "length is its character limit - trim elsewhere in the bullet to pay "
+            "for an insertion instead of just appending"
+        )
+
+    relevant_facts = [
+        fact
+        for fact in _posting_relevant_facts(bank, entry_id, keywords, job_text)
+        if _fact_fits_bullet(fact, original)
+    ]
     inserted_facts = [
         fact for fact in relevant_facts if _fact_inserted(original, new, fact)
     ]
@@ -208,10 +254,51 @@ def _fact_already_present(original: str, fact: Fact) -> bool:
     return all(_term_in_text(term, original) for term in terms)
 
 
+def _fits(original: str, candidate: str | None) -> str | None:
+    """None unless `candidate` is a real change that fits the original's length.
+
+    These templates only ever insert text, never trim, so they cannot pay for
+    what they add - unlike the model, which is told to. Returning an
+    over-length candidate here would just get rejected downstream anyway (see
+    `justified_enrichment`), so check the same cap up front rather than
+    manufacture a rewrite this bullet has no room for.
+    """
+    if candidate is None or candidate == original:
+        return None
+    return candidate if len(candidate) <= len(original) else None
+
+
+def _substitute_replaces(original: str, fact: Fact) -> str | None:
+    """Swap `fact.replaces` for this fact's own term, when it's in the bullet.
+
+    A straight substitution is guaranteed to fit the character cap whenever
+    the new term isn't longer than what it replaces, so it's tried before any
+    append-only insert.
+    """
+    if not fact.replaces:
+        return None
+    pattern = re.compile(rf"(?<![A-Za-z0-9]){re.escape(fact.replaces)}(?![A-Za-z0-9])")
+    if not pattern.search(original):
+        return None
+    terms = [t for t in _fact_insert_terms(fact) if not _term_in_text(t, original)]
+    if not terms:
+        return None
+    label = {"splunk": "Splunk", "python": "Python", "typescript": "TypeScript"}.get(
+        terms[0], terms[0].title()
+    )
+    return _fits(original, pattern.sub(label, original, count=1))
+
+
 def propose_fact_insert(original: str, fact: Fact) -> str | None:
-    """Insert a fact into a bullet with minimal wording change. None if redundant."""
+    """Insert a fact into a bullet with minimal wording change. None if redundant
+    or if the insertion has no room to fit within the bullet's original length."""
     if _fact_already_present(original, fact):
         return None
+
+    substituted = _substitute_replaces(original, fact)
+    if substituted:
+        return substituted
+
     orig_l = original.lower()
 
     if fact.id == "co_splunk":
@@ -224,7 +311,7 @@ def propose_fact_insert(original: str, fact: Fact) -> str | None:
             count=1,
             flags=re.I,
         )
-        return updated if updated != original else None
+        return _fits(original, updated)
 
     if fact.id == "co_languages":
         has_py = "python" in orig_l
@@ -232,7 +319,7 @@ def propose_fact_insert(original: str, fact: Fact) -> str | None:
         if has_py and has_ts:
             return None
         if has_ts and not has_py:
-            return original.replace("TypeScript", "Python/TypeScript")
+            return _fits(original, original.replace("TypeScript", "Python/TypeScript"))
         updated = re.sub(
             r"(AWS Lambda service)",
             r"\1 (Python/TypeScript)",
@@ -240,8 +327,9 @@ def propose_fact_insert(original: str, fact: Fact) -> str | None:
             count=1,
             flags=re.I,
         )
-        if updated != original:
-            return updated
+        fitted = _fits(original, updated)
+        if fitted:
+            return fitted
         updated = re.sub(
             r"(\d+ lambdas)",
             r"\1 (Python)",
@@ -249,7 +337,7 @@ def propose_fact_insert(original: str, fact: Fact) -> str | None:
             count=1,
             flags=re.I,
         )
-        return updated if updated != original else None
+        return _fits(original, updated)
 
     if fact.id == "cross_screen_snowflake":
         if "snowflake" in orig_l:
@@ -261,7 +349,31 @@ def propose_fact_insert(original: str, fact: Fact) -> str | None:
             count=1,
             flags=re.I,
         )
-        return updated if updated != original else None
+        return _fits(original, updated)
+
+    if fact.id == "co_agile":
+        if "agile" in orig_l:
+            return None
+        updated = re.sub(
+            r"(for 3 teams)",
+            r"\1 in an Agile workflow",
+            original,
+            count=1,
+            flags=re.I,
+        )
+        return _fits(original, updated)
+
+    if fact.id == "cross_screen_agile":
+        if "agile" in orig_l:
+            return None
+        updated = re.sub(
+            r"(using React/TypeScript and Django/Python)",
+            r"\1 in an Agile workflow",
+            original,
+            count=1,
+            flags=re.I,
+        )
+        return _fits(original, updated)
 
     terms = [t for t in _fact_insert_terms(fact) if not _term_in_text(t, original)]
     if not terms:
@@ -272,8 +384,10 @@ def propose_fact_insert(original: str, fact: Fact) -> str | None:
     )
     if "," in original:
         cut = original.find(",")
-        return f"{original[:cut]} using {label}{original[cut:]}"
-    return f"{original} using {label}"
+        candidate = f"{original[:cut]} using {label}{original[cut:]}"
+    else:
+        candidate = f"{original} using {label}"
+    return _fits(original, candidate)
 
 
 def suggest_enrichments(
@@ -293,15 +407,8 @@ def suggest_enrichments(
                         continue
                     if _fact_already_present(bullet.text, fact):
                         continue
-                    if fact.bullet_hint:
-                        hint_tokens = [
-                            w
-                            for w in re.findall(r"[a-z0-9]+", fact.bullet_hint.lower())
-                            if len(w) > 4 and w not in _STOPWORDS
-                        ]
-                        bullet_l = bullet.text.lower()
-                        if hint_tokens and not any(t in bullet_l for t in hint_tokens):
-                            continue
+                    if not _fact_fits_bullet(fact, bullet.text):
+                        continue
                     key = (bullet.id, fact.id)
                     if key in seen:
                         continue
@@ -474,6 +581,17 @@ def apply_plan(
             continue
         fact_id = _plan_source_id(item, "fact", "fact_id")
         original = bullet_text[bid]
+        if (
+            fact_id
+            and fact_id in bank.facts
+            and not _fact_fits_bullet(bank.facts[fact_id], original)
+        ):
+            log.warnings.append(
+                f"enrich on {bid} cited fact '{fact_id}', which is scoped to a "
+                "different bullet (bullet_hint mismatch); ignored to avoid "
+                "attaching a detail to work it doesn't describe."
+            )
+            continue
         text = item.get("text")
         if isinstance(text, str) and text.strip():
             proposed = text.strip()

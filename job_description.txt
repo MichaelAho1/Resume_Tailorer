@@ -1,72 +1,14 @@
-Forward Deployed Engineer
-Location
-San Francisco
-
-Employment Type
-Full time
-
-Location Type
-On-site
-
-Department
-Customer Success
-
-Overview
-Application
-
-Let’s Strengthen Your Resume
-0 out of 6 keywords matched, add more to make you stand out.
-
-Improve My Match
-0
-Low Match
-About Us
-Tavus is a research lab pioneering human computing. We’re building AI Humans: a new interface that closes the gap between people and machines, free from the friction of today’s systems. Our real-time human simulation models let machines see, hear, respond, and even look real—enabling meaningful, face-to-face conversations. AI Humans combine the emotional intelligence of humans with the reach and reliability of machines, making them capable, trusted agents available 24/7, in every language, on our terms.
-
-Imagine a therapist anyone can afford. A personal trainer who adapts to your schedule. A fleet of medical assistants that can give every patient the attention they need. With Tavus, individuals, enterprises, and developers can all build AI Humans to connect, understand, and act with empathy at scale.
-
-We’re a Series B company backed by world-class investors including Sequoia Capital, Y Combinator, and Scale Venture Partners.
-
-Be part of shaping a future where humans and machines truly understand each other.
-
-The Role
-This isn’t a traditional engineering job. As a Forward Deployed Engineer, you’ll split your time between two worlds:
-
-With customers (30–40%) — working hands-on to debug integrations, unblock adoption, and help them build amazing things with Tavus.
-
-With our product (the rest of the time) — building SDKs, prototypes, and enhancements to our core platform that make Tavus more powerful, intuitive, and delightful to use.
-
-You’ll be the bridge between customers and engineering, turning real-world challenges into product improvements. Your mission is simple: ensure every developer and creator has a smooth, magical experience with Tavus — backed by great docs, guides, tools, and product enhancements.
-
-Core Responsibilities
-Work directly with customers to debug, build POCs, and design solutions.
-
-Build prototypes, SDKs, sample apps, and tools that improve developer experience.
-
-Collect feedback, identify patterns, and translate them into product/engineering improvements.
-
-Partner on early feature adoption: test pre-release features with customers, gather feedback, suggest iterations.
-
-Help define how we develop a world class customer experience
-
-What Makes You a Great Fit
-Extremely solid software engineering fundamentals.
-
-Deep curiosity about problems at every level of the stack, from ML to infrastructure to networking.
-
-The desire to work closely with end users to understand their problems.
-
-A good “PM hat” to see patterns in customer requests and use those patterns to inform product direction.
-
-A strong bias toward action and a founder mindset to keep going until a problem is truly solved.
-
-Why This Role Matters
-Customers integrate Tavus faster and more reliably because of your support.
-
-Engineering ships changes directly informed by your field learnings.
-
-Prototypes and tools you build demonstrate new use cases and accelerate adoption.
-
-Product priorities are influenced by the patterns you uncover across customers.
-
-The challenge is providing world class customer experience as Tavus grows, while still feeling the customer’s pain and turning it into fast product improvements
+About the job
+Teamwork makes the stream work. Roku is changing how the world watches TVRoku is the #1 TV streaming platform in the U.S., Canada, and Mexico, and we've set our sights on powering every television in the world. Roku pioneered streaming to the TV. Our mission is to be the TV streaming platform that connects the entire TV ecosystem. We connect consumers to the content they love, enable content publishers to build and monetize large audiences, and provide advertisers unique capabilities to engage consumers.From your first day at Roku, you'll make a valuable - and valued - contribution. We're a fast-growing public company where no one is a bystander. We offer you the opportunity to delight millions of TV streamers around the world while gaining meaningful experience across a variety of disciplines.  About the role Roku is a streaming company. We are not an AI-first company and we are not going to tell you we are. What we are doing is building real agentic capability into the platform behind 100M+ streaming households, and we need engineers who can make agents work on top of systems that already carry serious load. This is a systems engineering job first. The agent work sits on telemetry, distributed services and physical devices, and it is the systems half that makes it hard. If you have built something agentic and you also know why a schema change matters when it ships to millions of devices, this is the role for you! About the team Join the Roku OS Platform UI team — the engineers behind Roku's home screen, Roku Channel and other content discovery and browse experiences that greet every Roku user the moment they turn on their TV. Our work ships to hundreds of millions of devices worldwide.  We move fast and hold a high bar. Engineers on this team own features end-to-end — from the OS platform layer through Application and UI to cloud integration — and collaborate closely with product, design, and cross-functional engineering partners to bring ambitious ideas to production at scale.  What you will work on 
+Multi-step agents that do real work in production. Detecting regressions across services, bisecting the commits that caused them, proposing fixes, generating and reviewing code that other engineers review and merge. 
+Internal tooling that your colleagues actually adopt. Skills, harnesses and services that make the team faster, rather than demos that get admired once. 
+Real-time telemetry and event processing at streaming scale, under the CPU and memory constraints that come with shipping to devices in people’s homes. 
+Agent problems that only exist when there is hardware in the loop: physical feedback, device fleets, and signals you cannot simulate on a laptop. 
+What we are looking for 
+Up to 4/6 years of professional engineering experience since you finished studying. 
+Strong systems or infrastructure fundamentals. Real-time data, telemetry, distributed systems, platforms, or device work. This is the part we will not compromise on. 
+Something agentic that you have built and shipped, and that other people use. A work project or a serious personal one, and multi-step rather than a wrapper around a chat window. Come ready to talk about what it does and what broke. 
+A clear account of how you stay accountable for code you did not type. Design-first, review discipline, your own gates. We do not mind which, as long as it is yours, and you can explain it. 
+A view on where agents are not good enough yet and why 
+The existing right to work in the US. We are not able to sponsor visas for this role. 
+How we interview 

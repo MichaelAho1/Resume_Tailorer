@@ -33,13 +33,14 @@ experiences:
     title: AI Consultant
     dates: August 2025 - Present
     location: Reston, VA
-    tags: [ai, llm, claude, genai, consulting, client-facing, communication, clients, stakeholder, forward-deployed, automation, prompt-engineering, adoption, advertising]
+    tags: [ai, llm, claude, genai, consulting, client-facing, forward-deployed, solutions-engineering, customer-facing, pre-sales, automation, prompt-engineering, adoption, advertising]
     notes: >
-      Client-facing applied-AI consulting, and the only currently ongoing role.
-      Strongest signal for postings about client communication, interfacing with
-      internal/external stakeholders, consulting, or solutions delivery — not
-      only AI/ML roles. Also strong for AI/ML, LLMs, GenAI adoption, or
-      forward-deployed archetypes. Less relevant for pure infrastructure postings.
+      Client-facing applied-AI consulting; the only current role. Add ONLY if
+      the posting's CORE function is consulting, forward-deployed, solutions
+      engineering, or customer-facing delivery - NOT a standard SWE posting
+      that just lists communication/stakeholders/client-partnering as one
+      requirement among many (most SWE postings do). Also fits AI/ML/GenAI
+      adoption roles. Weak fit for pure infrastructure postings.
     requires_drop: [fantasy_stock_league, jmu_coursework_and_awards]
     bullets:
       - id: 2landmarks_adoption
@@ -70,3 +71,37 @@ projects:
       - id: nbody_pipeline
         text: Built a benchmark pipeline for shared-memory weak scaling and distributed MPI sweeps, rendering them with a Python visualizer (NumPy/matplotlib) as plots
         tags: [benchmarking, mpi, distributed, numpy, matplotlib, visualization, pipeline, parallel]
+
+  - id: fitcheck
+    name: FitCheck
+    dates: August 2026 - Present
+    tech: Python, Claude API, LaTeX, YAML
+    link: https://github.com/MichaelAho1/Resume_Tailorer
+    tags: [ai, llm, claude, genai, llm-application, prompt-engineering, structured-output, guardrails, agents, automation, developer-tools, internal-tools, python, api-integration, cost-optimization, evaluation, json, parsing, cli, latex]
+    notes: >
+      Strongest signal for AI/LLM/GenAI application postings, agent or
+      LLM-tooling work, and internal developer-tools roles. Also a fair
+      general-SWE fit given the parser and validation layer. Skip for pure
+      infrastructure, embedded, or data-engineering postings where QuickMarketz
+      or Parallel-Nbody carry more signal. Solo personal project, so weaker
+      evidence than the paid roles on team or scale.
+    requires_drop: [fantasy_stock_league, jmu_coursework_and_awards]
+    bullets:
+      - id: fitcheck_guardrails
+        text: Prevented fabricated content via 16 deterministic validation rules (source citation, metric preservation, 70\% token overlap floor), replacing an LLM self-check that falsely rejected 40\% of valid edits
+        tags: [llm, guardrails, validation, hallucination, ai-safety, evaluation, correctness]
+      - id: fitcheck_tokens
+        text: Cut token cost by 75\% with a sparse-diff output format and model routing (Opus for planning, Sonnet for edits)
+        tags: [llm, cost-optimization, model-routing, prompt-engineering, api-integration, performance]
+      - id: fitcheck_feedback_loop
+        text: Built a closed-loop generation cycle that grounds the model in a real compiler, parsing pdflatex page counts to re-prompt with a quantified trim target until output converges within 3 iterations
+        tags: [agents, feedback-loop, llm, automation, verification, pipeline]
+      - id: fitcheck_structured_output
+        text: Hardened structured-output handling with a 4-candidate tolerant JSON decoder and error-class backoff retry, eliminating pipeline failures from non-conforming model responses
+        tags: [structured-output, json, parsing, reliability, error-handling, api-integration, retry]
+      - id: fitcheck_prompting
+        text: Authored a 900+ word system prompt with schema contracts, few-shot examples, and explicit failure definitions, plus a banned-phrase list that suppresses LLM stylistic tells in generated prose
+        tags: [prompt-engineering, llm, few-shot, schema, genai, nlp]
+      - id: fitcheck_parser
+        text: Wrote a dependency-free recursive-descent LaTeX parser with balanced-brace matching and lossless round-trip rendering, keeping the tool at 2 runtime dependencies across 2900 lines of Python
+        tags: [python, parsing, compilers, ast, recursive-descent, data-structures, algorithms]

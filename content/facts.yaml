@@ -52,6 +52,7 @@ facts:
 
   - id: co_agile
     scope: capital_one
+    bullet_hint: the MCP tooling migration bullet (removing Python dependency conflicts for 3 teams)
     text: Worked in an Agile workflow with the team
     tags: [agile, scrum, sprints, collaboration, teamwork, communication]
 
@@ -65,6 +66,10 @@ facts:
     bullet_hint: the Integrity / CodeDeploy rollback automation bullet
     text: The Integrity rollback automation included writing a Splunk query
     tags: [splunk, observability, monitoring, logging, alerting, alerts, outages, sre, incident-response]
+    # Integrity and Splunk are interchangeable in this bullet - naming Splunk
+    # instead of Integrity is truthful and reads better for observability
+    # postings, so swap it in rather than appending both.
+    replaces: Integrity
 
   # --- ILS -----------------------------------------------------------------
   - id: ils_cursor
@@ -75,6 +80,7 @@ facts:
   # --- Cross Screen Media --------------------------------------------------
   - id: cross_screen_agile
     scope: cross_screen_media
+    bullet_hint: the ScreenSolveV2 full-stack features bullet
     text: Worked in an Agile workflow with designers and product managers
     tags: [agile, scrum, sprints, collaboration, teamwork, cross-functional, communication]
 

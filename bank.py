@@ -61,6 +61,11 @@ class Fact:
     scope: str  # entry id, "global", or "skills"
     tags: list[str] = field(default_factory=list)
     bullet_hint: str = ""
+    # A literal term already in the target bullet that this fact's tool/tag
+    # truthfully substitutes for (e.g. "Integrity" for a Splunk fact whose
+    # rollback automation used both interchangeably). Swapping it in place of
+    # appending is guaranteed to fit within the bullet's character limit.
+    replaces: str = ""
 
 
 @dataclass
@@ -222,6 +227,7 @@ def load_bank(bank_dir: Path) -> ContentBank:
             scope=_require(raw, "scope", f"{FACTS_FILE} fact '{fact_id}'"),
             tags=[str(t) for t in tags],
             bullet_hint=str(raw.get("bullet_hint") or ""),
+            replaces=str(raw.get("replaces") or ""),
         )
 
     return bank
@@ -275,7 +281,7 @@ def bank_payload(bank: ContentBank, resume_entry_ids: list[str]) -> dict:
                 "hdr": " | ".join(f for f in entry.fields if f),
                 "tags": entry.tags,
                 **({"drop": entry.requires_drop} if entry.requires_drop else {}),
-                **({"n": entry.notes.strip()[:160]} if entry.notes.strip() else {}),
+                **({"n": entry.notes.strip()[:420]} if entry.notes.strip() else {}),
                 "b": [
                     {"id": b.id, "t": b.text, "tags": b.tags}
                     for b in entry.bullets
@@ -300,6 +306,7 @@ def bank_payload(bank: ContentBank, resume_entry_ids: list[str]) -> dict:
                 "t": f.text,
                 "tags": f.tags,
                 **({"hint": f.bullet_hint} if f.bullet_hint else {}),
+                **({"swap": f.replaces} if f.replaces else {}),
             }
             for f in bank.facts.values()
         ],

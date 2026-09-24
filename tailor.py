@@ -34,6 +34,7 @@ from apply_plan import (
     suggest_enrichments,
 )
 from bank import bank_payload, load_bank
+from cover_letter import render_cover_letter
 from resume_doc import (
     MUTABLE_SECTIONS,
     Document,
@@ -45,12 +46,14 @@ from resume_doc import (
 
 RESUME_NEW_GRAD = "base_resume.tex"
 RESUME_1YO = "1yo_experience_base_resume.tex"
+COVER_LETTER_TEMPLATE = "base_cover_letter.tex"
 DEFAULT_JOB = "job_description.txt"
 DEFAULT_OUTPUT = "output"
 DEFAULT_BANK = "content"
 DEFAULT_MODEL = "sonnet"
 DEFAULT_PLAN_MODEL = "opus"
 OUTPUT_BASENAME = "Michael_Aho_Resume_2026"
+COVER_LETTER_BASENAME = "Michael_Aho_Cover_Letter_2026"
 MAX_PAGES = 1
 MAX_TRIM_PASSES = 3
 # Calibrated for this template by padding the resume until pdflatex reported a
@@ -155,20 +158,22 @@ def trim_payload(doc: Document) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
-def compile_pdf(tex_source: str, pdf_dest: Path | None) -> tuple[int, str]:
+def compile_pdf(
+    tex_source: str, pdf_dest: Path | None, basename: str = OUTPUT_BASENAME
+) -> tuple[int, str]:
     """Compile LaTeX. Returns (page_count, log_tail). page_count is 0 on failure."""
     if shutil.which("pdflatex") is None:
         raise TailorError("pdflatex not found on PATH. Install MiKTeX or TeX Live.")
 
     with tempfile.TemporaryDirectory(prefix="resume_tailor_") as tmp:
         tmp_dir = Path(tmp)
-        tmp_tex = tmp_dir / f"{OUTPUT_BASENAME}.tex"
+        tmp_tex = tmp_dir / f"{basename}.tex"
         tmp_tex.write_text(tex_source, encoding="utf-8")
 
         try:
             proc = subprocess.run(
                 ["pdflatex", "-interaction=nonstopmode", "-halt-on-error",
-                 f"{OUTPUT_BASENAME}.tex"],
+                 f"{basename}.tex"],
                 cwd=tmp_dir,
                 capture_output=True,
                 text=True,
@@ -178,8 +183,8 @@ def compile_pdf(tex_source: str, pdf_dest: Path | None) -> tuple[int, str]:
         except OSError as exc:
             raise TailorError(f"Failed to run pdflatex: {exc}") from exc
 
-        tmp_pdf = tmp_dir / f"{OUTPUT_BASENAME}.pdf"
-        log_path = tmp_dir / f"{OUTPUT_BASENAME}.log"
+        tmp_pdf = tmp_dir / f"{basename}.pdf"
+        log_path = tmp_dir / f"{basename}.log"
         log_text = (
             log_path.read_text(encoding="utf-8", errors="replace")
             if log_path.exists()
@@ -265,6 +270,51 @@ def print_changes(log, doc: Document) -> None:
     for warning in log.warnings:
         print(f"  ! {warning}")
     print(f"  estimated {doc.est_lines} rendered lines")
+
+
+def build_cover_letter(
+    plan_model: str, job_text: str, company: str, run_dir: Path, dry_run: bool
+) -> None:
+    """Generate and compile the cover letter into run_dir. Non-fatal on failure."""
+    template_path = Path(COVER_LETTER_TEMPLATE)
+    if not template_path.exists():
+        print(f"\n! Skipping cover letter: missing {COVER_LETTER_TEMPLATE}")
+        return
+
+    print("\nWriting cover letter...")
+    try:
+        template = template_path.read_text(encoding="utf-8")
+        opening, closing_mention = planner.generate_cover_letter_opening(
+            plan_model, job_text, company
+        )
+        tailored = render_cover_letter(template, company, opening, closing_mention)
+    except TailorError as exc:
+        print(f"! Cover letter generation failed: {exc}")
+        return
+
+    tex_out = run_dir / f"{COVER_LETTER_BASENAME}.tex"
+    pdf_out = run_dir / f"{COVER_LETTER_BASENAME}.pdf"
+
+    if dry_run:
+        tex_out.write_text(tailored, encoding="utf-8")
+        print(f"  Dry run: wrote {tex_out} (skipped PDF).")
+        return
+
+    try:
+        pages, log_tail = compile_pdf(tailored, pdf_out, basename=COVER_LETTER_BASENAME)
+    except TailorError as exc:
+        tex_out.write_text(tailored, encoding="utf-8")
+        print(f"! Cover letter compilation failed: {exc}")
+        return
+
+    if pages == 0:
+        tex_out.write_text(tailored, encoding="utf-8")
+        print(f"! Cover letter PDF compilation failed. .tex saved at {tex_out}\n{log_tail}")
+        return
+
+    tex_out.write_text(tailored, encoding="utf-8")
+    print(f"  {tex_out}")
+    print(f"  {pdf_out}  ({pages} page)")
 
 
 # ---------------------------------------------------------------------------
@@ -478,6 +528,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.dry_run:
             tex_out.write_text(tailored, encoding="utf-8")
             print(f"\nDry run: wrote {tex_out} (skipped PDF).")
+            build_cover_letter(plan_model, job_text, company, run_dir, args.dry_run)
             return 0
 
         print("\nCompiling...")
@@ -524,6 +575,8 @@ def main(argv: list[str] | None = None) -> int:
 
         if resume_path.read_text(encoding="utf-8") != resume_source:
             raise TailorError("Master resume changed during the run; aborting.")
+
+        build_cover_letter(plan_model, job_text, company, run_dir, args.dry_run)
 
         print()
         if pages > args.max_pages:
