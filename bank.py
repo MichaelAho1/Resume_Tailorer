@@ -233,8 +233,24 @@ def load_bank(bank_dir: Path) -> ContentBank:
     return bank
 
 
-def bank_payload(bank: ContentBank, resume_entry_ids: list[str]) -> dict:
-    """Serialize the bank for the planner prompt (compact keys)."""
+def _norm_text(text: str) -> str:
+    return " ".join(text.replace("\\", "").lower().split())
+
+
+def bank_payload(
+    bank: ContentBank,
+    resume_entry_ids: list[str],
+    resume_bullet_texts: list[str] | None = None,
+) -> dict:
+    """Serialize the bank for the planner prompt (compact keys).
+
+    The two master resumes don't carry the same entries, so a bank entry can
+    already be on the resume being tailored (FitCheck on base_resume.tex,
+    Fantasy Stock League on the 1yo one). Such an entry isn't offered as an
+    add; its bullets surface as extras for the resume entry instead, minus any
+    whose text is already on the resume.
+    """
+    on_resume = {_norm_text(t) for t in resume_bullet_texts or []}
     unknown = [
         b.entry
         for b in bank.bullets.values()
@@ -248,7 +264,9 @@ def bank_payload(bank: ContentBank, resume_entry_ids: list[str]) -> dict:
             + ", ".join(resume_entry_ids)
         )
 
-    valid_drop_targets = set(resume_entry_ids) | KNOWN_DROP_SENTINELS
+    # A bank entry id is a valid target even when it isn't on this resume:
+    # it's simply already gone, which counts toward the requirement.
+    valid_drop_targets = set(resume_entry_ids) | set(bank.entries) | KNOWN_DROP_SENTINELS
     bad_drops = {
         (entry.id, target)
         for entry in bank.entries.values()
@@ -288,6 +306,7 @@ def bank_payload(bank: ContentBank, resume_entry_ids: list[str]) -> dict:
                 ],
             }
             for entry in bank.entries.values()
+            if entry.id not in resume_entry_ids
         ],
         "extra": [
             {
@@ -298,6 +317,7 @@ def bank_payload(bank: ContentBank, resume_entry_ids: list[str]) -> dict:
             }
             for b in bank.bullets.values()
             if b.entry and b.entry in resume_entry_ids
+            and _norm_text(b.text) not in on_resume
         ],
         "facts": [
             {

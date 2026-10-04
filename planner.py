@@ -146,7 +146,8 @@ or restructure sentences. DO actively tailor by:
   2. `add_entries` / `add_bullets` — pull bank content in when tags match the role.
   3. `drop_entries` / `drop_bullets` — cut less relevant items to make room.
   4. `skills` — reorder to lead with posting keywords (Python, UNIX/Linux, etc.).
-  5. `reorder` — surface the most relevant jobs/projects first.
+  5. `reorder` — surface the most relevant PROJECTS first. WORK EXPERIENCE is
+     always kept reverse-chronological by the tool; don't reorder it.
 
 A good plan for a typical posting has several enrichments plus 0-2 bank adds.
 An empty or nearly empty plan is a failure unless nothing in the bank fits.
@@ -188,13 +189,16 @@ Two ways to make room, in priority order:
    and reads more natural than tacking a clause on.
 2. Otherwise, CUT a low-value descriptive clause — one that just restates
    something already obvious from context — rather than hunting for filler
-   words in an already-tight bullet. Example: inserting "using Claude Code"
-   into "Developed the transactions AWS Lambda service powering Eno, Capital
-   One's AI assistant serving 5M+ customers" (108 chars) should drop the
-   appositive "Capital One's AI assistant" (Eno is already named and the
-   employer is already known from the entry header) rather than reword
-   unrelated parts: "Developed the transactions AWS Lambda service using
-   Claude Code, powering Eno, serving 5M+ customers" (100 chars). Keep every
+   words in an already-tight bullet. Example: inserting "and Claude Code"
+   into "Built the transactions AWS Lambda service using Python/TypeScript
+   powering Eno, an AI assistant for 5M+ users" (109 chars) should drop the
+   appositive "an AI assistant" (Eno is already named) and the redundant
+   "service" (a Lambda is a service) rather than reword unrelated parts:
+   "Built the transactions AWS Lambda using Python/TypeScript and Claude
+   Code, powering Eno for 5M+ users" (101 chars). Aim to land a few
+   characters UNDER the original, not exactly at it: inserted proper nouns
+   and acronyms are wider than the lowercase words they replace, so a
+   same-length rewrite can still wrap onto a second line. Keep every
    other word as-is when doing this — cutting a clause is not license to
    reword the rest.
 
@@ -209,8 +213,8 @@ relevant. Examples:
   - UNIX / Linux / systems → linux_jmu on skills, Linux on skills line
   - C/C++, HPC, parallel/distributed computing, performance engineering, or
     scientific computing/benchmarking → parallel_nbody project (its `requires_drop`
-    swaps out Fantasy Stock League, which has no C/C++ content and is the
-    weakest fit for this kind of posting)
+    swaps out Fantasy Stock League when present, which has no C/C++ content
+    and is the weakest fit for this kind of posting)
   - the role's CORE function is consulting, forward-deployed engineering,
     solutions engineering/architecture, or customer-facing delivery →
     consulting entries. A standard SWE posting that merely lists
@@ -248,7 +252,7 @@ Return ONLY valid JSON (no markdown):
     "drop_entries": ["parallel_nbody"],
     "add_bullets": [{"id": "cross_screen_debug", "entry": "cross_screen_media"}],
     "add_entries": [{"id": "2landmarks", "section": "WORK EXPERIENCE", "position": 0, "bullets": ["2landmarks_adoption"]}],
-    "reorder": [{"section": "WORK EXPERIENCE", "order": ["2landmarks", "capital_one", "ils"]}],
+    "reorder": [{"section": "PROJECTS", "order": ["parallel_nbody", "fitcheck"]}],
     "skills": {"Programming Languages": "Python, ...", "Frameworks \\\\& Libraries": "...", "Cloud \\\\& Tools": "... Linux/UNIX ...", "Testing \\\\& Databases": "..."}
   }
 }

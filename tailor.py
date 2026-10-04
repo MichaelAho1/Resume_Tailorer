@@ -434,7 +434,9 @@ def main(argv: list[str] | None = None) -> int:
             bank.bullets.clear()
             bank.facts.clear()
         entry_ids = [e.id for e in doc.all_entries()]
-        payload_bank = bank_payload(bank, entry_ids)
+        payload_bank = bank_payload(
+            bank, entry_ids, [b.text for e in doc.all_entries() for b in e.bullets]
+        )
         if bank.is_empty:
             print("Content bank: empty (nothing to pull in).")
         else:

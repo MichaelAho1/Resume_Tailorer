@@ -13,7 +13,12 @@
 # `python tailor.py --list-ids` to print the current valid ids.
 #
 # Current ids:
-#   capital_one, ils, cross_screen_media, quickmarketz, fantasy_stock_league
+#   base_resume.tex:               ils, capital_one, cross_screen_media, fitcheck, quickmarketz
+#   1yo_experience_base_resume.tex: ils, capital_one, cross_screen_media, quickmarketz, fantasy_stock_league
+#
+# Bullets for a project that lives in experience_bank.yaml (e.g. FitCheck)
+# stay nested under it there; they're offered as extras automatically on a
+# resume that already has that project.
 #
 # Rules:
 #   - Every `id` must be unique across all three content files.

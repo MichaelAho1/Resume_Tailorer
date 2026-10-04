@@ -25,6 +25,9 @@
 #     and "Awards" bullets together as one unit. If two added entries both
 #     list the same first-choice target, the second one falls through to its
 #     next preference once the first is already gone.
+#   - An entry that is already on the master resume being tailored (FitCheck
+#     on base_resume.tex, Fantasy Stock League on the 1yo resume) is not
+#     offered as an add; its other bullets become swap-in extras instead.
 # =============================================================================
 
 experiences:
@@ -72,6 +75,25 @@ projects:
         text: Built a benchmark pipeline for shared-memory weak scaling and distributed MPI sweeps, rendering them with a Python visualizer (NumPy/matplotlib) as plots
         tags: [benchmarking, mpi, distributed, numpy, matplotlib, visualization, pipeline, parallel]
 
+  - id: fantasy_stock_league
+    name: Fantasy Stock League
+    dates: October 2025 - November 2025
+    tech: React/JavaScript, Django/Python
+    link: https://github.com/MichaelAho1/FantasyStockLeague
+    tags: [react, javascript, django, python, full-stack, spa, jwt, authentication, authorization, security, rate-limiting, api-integration, third-party-apis, rest-api, design-patterns]
+    notes: >
+      Weakest project; cut from base_resume.tex to make room for FitCheck.
+      Add only when a posting leans on full-stack web work, auth/JWT, access
+      control, or third-party API rate limiting AND it beats FitCheck or
+      QuickMarketz for that posting. Overlaps QuickMarketz on stack.
+    bullets:
+      - id: fsl_rate_limiting
+        text: Engineered singleton-based rate limiting to enforce a 5-call/30-min quota, reducing third-party API usage by 80\%
+        tags: [rate-limiting, design-patterns, singleton, api-integration, third-party-apis, performance, cost-optimization]
+      - id: fsl_auth
+        text: Built a React SPA + Django backend with JWT auth, enforcing league-scoped authorization across 15 endpoints
+        tags: [react, django, jwt, authentication, authorization, security, rest-api, full-stack, spa]
+
   - id: fitcheck
     name: FitCheck
     dates: August 2026 - Present
@@ -88,7 +110,7 @@ projects:
     requires_drop: [fantasy_stock_league, jmu_coursework_and_awards]
     bullets:
       - id: fitcheck_guardrails
-        text: Prevented fabricated content via 16 deterministic validation rules (source citation, metric preservation, 70\% token overlap floor), replacing an LLM self-check that falsely rejected 40\% of valid edits
+        text: Prevented fabricated content through 16 validation rules (source citation, metric preservation, 70\% token overlap floor), replacing an LLM self-check that falsely rejected 40\% of valid edits
         tags: [llm, guardrails, validation, hallucination, ai-safety, evaluation, correctness]
       - id: fitcheck_tokens
         text: Cut token cost by 75\% with a sparse-diff output format and model routing (Opus for planning, Sonnet for edits)

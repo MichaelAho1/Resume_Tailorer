@@ -15,8 +15,8 @@
 #
 # `scope` controls where a fact may be used:
 #   <entry id>  - only in bullets belonging to that entry (capital_one, ils,
-#                 cross_screen_media, quickmarketz, fantasy_stock_league, or a
-#                 bank entry id like 2landmarks)
+#                 cross_screen_media, quickmarketz, or a bank entry id like
+#                 landmarks, fitcheck, fantasy_stock_league)
 #   global      - in any bullet, and in the skills lines
 #   skills      - in the skills lines only
 #
@@ -72,6 +72,12 @@ facts:
     replaces: Integrity
 
   # --- ILS -----------------------------------------------------------------
+  - id: ils_open_crawler
+    scope: ils
+    bullet_hint: the Go/Elasticsearch distributed backend bullet
+    text: The search platform's backend used Elastic Open Crawler for web crawling
+    tags: [elastic-open-crawler, crawler, web-crawling, web-scraping, elastic, search]
+
   - id: ils_cursor
     scope: ils
     text: Used Cursor as a development tool

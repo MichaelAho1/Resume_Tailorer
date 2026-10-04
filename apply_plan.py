@@ -834,6 +834,16 @@ def apply_plan(
             section.entries = ordered
             log.reordered.append(section.name)
 
+    # Work experience is always reverse-chronological, whatever the model asked
+    # for. Relevance ordering only applies to projects.
+    work = doc.section("WORK EXPERIENCE")
+    if work is not None and work.mutable:
+        chronological = sort_reverse_chronological(work.entries)
+        if [e.id for e in chronological] != [e.id for e in work.entries]:
+            work.entries = chronological
+            if work.name not in log.reordered:
+                log.reordered.append(work.name)
+
     # --- 7. skills ----------------------------------------------------------
     skills = plan.get("skills") or {}
     if isinstance(skills, dict) and skills:
@@ -870,6 +880,48 @@ def apply_plan(
                 bullet.id = f"{entry.id}.b{position}"
 
     return log
+
+
+_MONTHS = {
+    m: i
+    for i, m in enumerate(
+        ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"],
+        start=1,
+    )
+}
+_DATE_RE = re.compile(r"([A-Za-z]+)\.?\s+(\d{4})|(\d{4})")
+
+
+def _parse_month(text: str) -> tuple[int, int] | None:
+    text = text.strip()
+    if text.lower() in {"present", "current", "now"}:
+        return (9999, 12)
+    match = _DATE_RE.search(text)
+    if not match:
+        return None
+    if match.group(3):
+        return (int(match.group(3)), 0)
+    month = _MONTHS.get(match.group(1)[:3].lower())
+    return (int(match.group(2)), month or 0)
+
+
+def sort_reverse_chronological(entries: list[Entry]) -> list[Entry]:
+    """Order subheading entries newest-first: current roles, then by end date,
+    then by start date. Entries whose dates can't be parsed keep their place
+    relative to each other at the end; ties keep their existing order."""
+    dated: list[tuple[tuple[int, int], tuple[int, int], Entry]] = []
+    undated: list[Entry] = []
+    for entry in entries:
+        dates = entry.fields[1] if entry.kind == "subheading" and len(entry.fields) > 1 else ""
+        parts = re.split(r"\s+(?:-|--|–|—|to)\s+", dates.strip(), maxsplit=1)
+        start = _parse_month(parts[0]) if parts[0] else None
+        end = _parse_month(parts[1]) if len(parts) > 1 else start
+        if start is None or end is None:
+            undated.append(entry)
+        else:
+            dated.append((end, start, entry))
+    dated.sort(key=lambda t: (t[0], t[1]), reverse=True)
+    return [e for _, _, e in dated] + undated
 
 
 def _drop_target_present(doc: Document, target: str) -> bool:
